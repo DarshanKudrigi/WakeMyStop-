@@ -4,6 +4,8 @@ const cookieParser = require('cookie-parser');
 
 const { clientOrigin } = require('./config/env');
 const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const journeyRoutes = require('./routes/journeyRoutes');
 const { notFoundHandler, errorHandler } = require('./middleware/errorMiddleware');
 
 const app = express();
@@ -19,6 +21,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/journeys', journeyRoutes);
 
 app.get('/health', (req, res) => {
   res.status(200).json({
