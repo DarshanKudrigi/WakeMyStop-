@@ -1,7 +1,7 @@
 ````markdown
 # 🚆 AI Train Notification & Smart Journey Assistant
 
-A smart train tracking application built using **Node.js**, **Express.js**, **MonongoDB**, and **Socket.IO**.
+A smart train tracking application built using **React.js**, **Node.js**, **Express.js**, **MonongoDB**, and **Socket.IO**.
 
 This project helps users track their train, get live updates, receive important notifications, and use AI to get travel information.
 
