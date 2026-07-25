@@ -1,13 +1,5 @@
-import axios from 'axios'
-
-import { getToken, removeToken } from '../utils/auth'
-
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-})
+import httpClient from './httpClient'
+import { removeToken } from '../utils/auth'
 
 const buildFriendlyError = (error) => {
   if (!error.response) {
@@ -31,19 +23,9 @@ const throwFriendlyError = (error) => {
   throw new Error(buildFriendlyError(error), { cause: error })
 }
 
-api.interceptors.request.use((config) => {
-  const token = getToken()
-
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-
-  return config
-})
-
 export const login = async (payload) => {
   try {
-    const response = await api.post('/api/auth/login', payload)
+    const response = await httpClient.post('/api/auth/login', payload)
 
     return response.data
   } catch (error) {
@@ -53,7 +35,7 @@ export const login = async (payload) => {
 
 export const register = async (payload) => {
   try {
-    const response = await api.post('/api/auth/register', payload)
+    const response = await httpClient.post('/api/auth/register', payload)
 
     return response.data
   } catch (error) {
@@ -63,7 +45,7 @@ export const register = async (payload) => {
 
 export const logout = async () => {
   try {
-    const response = await api.post('/api/auth/logout')
+    const response = await httpClient.post('/api/auth/logout')
 
     removeToken()
 
@@ -76,7 +58,7 @@ export const logout = async () => {
 
 export const getCurrentUser = async () => {
   try {
-    const response = await api.get('/api/auth/me')
+    const response = await httpClient.get('/api/auth/me')
 
     return response.data
   } catch (error) {
@@ -88,3 +70,5 @@ export const getCurrentUser = async () => {
     throwFriendlyError(error)
   }
 }
+
+export { buildFriendlyError }

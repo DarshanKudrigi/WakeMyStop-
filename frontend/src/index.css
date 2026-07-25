@@ -1,33 +1,27 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
 
-:root {
-  font-family: 'Manrope', sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  color: #e2e8f0;
-  background: #0b1020;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+/* Enable class-based dark mode selector in Tailwind CSS v4 */
+@custom-variant dark (&:where(.dark, .dark *));
 
 * {
   box-sizing: border-box;
 }
 
-html {
-  min-height: 100%;
-}
-
+html,
 body {
   margin: 0;
+  padding: 0;
   min-height: 100vh;
-  background: #0b1020;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 a {
   color: inherit;
+  text-decoration: none;
 }
 
 button,
@@ -39,3 +33,50 @@ input {
   min-height: 100vh;
 }
 
+/* ─── Ken Burns cinematic pan/zoom on the train background ─── */
+@keyframes kenBurns {
+  0%   { transform: scale(1.08) translate(0%, 0%); }
+  25%  { transform: scale(1.12) translate(-1.5%, 0.5%); }
+  50%  { transform: scale(1.1)  translate(-0.5%, -1%); }
+  75%  { transform: scale(1.13) translate(1%, 0.5%); }
+  100% { transform: scale(1.08) translate(0%, 0%); }
+}
+
+/* ─── Floating particle drift ─── */
+@keyframes particleDrift {
+  0%   { transform: translateY(0px) translateX(0px) scale(1); opacity: 0.3; }
+  33%  { transform: translateY(-18px) translateX(8px) scale(1.1); opacity: 0.6; }
+  66%  { transform: translateY(-8px) translateX(-5px) scale(0.9); opacity: 0.4; }
+  100% { transform: translateY(0px) translateX(0px) scale(1); opacity: 0.3; }
+}
+
+/* ─── Slow light-ray sweep ─── */
+@keyframes lightRay {
+  0%   { opacity: 0; transform: translateX(-20px) skewX(-15deg); }
+  30%  { opacity: 0.08; }
+  60%  { opacity: 0.04; }
+  100% { opacity: 0; transform: translateX(120vw) skewX(-15deg); }
+}
+
+/* ─── Fog pulse ─── */
+@keyframes fogPulse {
+  0%, 100% { opacity: 0.18; transform: scale(1); }
+  50%       { opacity: 0.28; transform: scale(1.04); }
+}
+
+/* ─── Utility animation classes ─── */
+.animate-ken-burns {
+  animation: kenBurns 28s ease-in-out infinite;
+}
+
+.animate-particle {
+  animation: particleDrift 7s ease-in-out infinite;
+}
+
+.animate-light-ray {
+  animation: lightRay 14s linear infinite;
+}
+
+.animate-fog {
+  animation: fogPulse 9s ease-in-out infinite;
+}

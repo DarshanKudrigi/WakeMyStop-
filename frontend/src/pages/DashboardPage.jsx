@@ -1,71 +1,60 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-
-import { getCurrentUser, logout } from '../api/authApi'
-import { getTokenExpiryMessage, removeToken } from '../utils/auth'
+import { useState, useEffect } from 'react'
+import CurrentJourneyCard from '../components/dashboard/CurrentJourneyCard'
+import TrainSearchCard from '../components/dashboard/TrainSearchCard'
+import LiveTrainStatusCard from '../components/dashboard/LiveTrainStatusCard'
+import FeaturesSection from '../components/dashboard/FeaturesSection'
 
 function DashboardPage() {
-  const navigate = useNavigate()
-  const [user, setUser] = useState(null)
-  const [message, setMessage] = useState('Loading your account...')
+  const [activeJourney, setActiveJourney] = useState(null)
 
+  // Load active journey from localStorage if confirmed by user
   useEffect(() => {
-    let isMounted = true
-
-    const loadUser = async () => {
-      try {
-        const response = await getCurrentUser()
-
-        if (isMounted) {
-          setUser(response?.data?.user || null)
-          setMessage('Your session is active.')
-        }
-      } catch (error) {
-        if (isMounted) {
-          setMessage(error.message || getTokenExpiryMessage())
-          removeToken()
-          navigate('/login', { replace: true })
-        }
-      }
-    }
-
-    loadUser()
-
-    return () => {
-      isMounted = false
-    }
-  }, [navigate])
-
-  const handleLogout = async () => {
     try {
-      await logout()
-    } finally {
-      navigate('/login', { replace: true })
+      const saved = localStorage.getItem('railalert_active_journey')
+      if (saved) {
+        setActiveJourney(JSON.parse(saved))
+      } else {
+        setActiveJourney(null)
+      }
+    } catch {
+      setActiveJourney(null)
+    }
+  }, [])
+
+  const handleCompleteJourney = () => {
+    setActiveJourney(null)
+    try {
+      localStorage.removeItem('railalert_active_journey')
+    } catch {
+      // Ignore
     }
   }
 
   return (
-    <main className="dashboard-page">
-      <section className="dashboard-card">
-        <span className="eyebrow">Protected route</span>
-        <h1>Dashboard placeholder</h1>
-        <p className="muted">{message}</p>
+    <div className="w-full space-y-6 sm:space-y-8">
+      {/* Active Journey Ticket Card (ONLY shown when user has a confirmed active journey) */}
+      {activeJourney ? (
+        <CurrentJourneyCard
+          journey={activeJourney}
+          onCompleteJourney={handleCompleteJourney}
+        />
+      ) : null}
 
-        {user ? (
-          <div className="profile-block">
-            <div>
-              <strong>{user.name}</strong>
-              <p>{user.email}</p>
-            </div>
-            <p>{user.phone || 'No phone number saved yet.'}</p>
-          </div>
-        ) : null}
-
-        <button className="button button-primary" type="button" onClick={handleLogout}>
-          Logout
-        </button>
+      {/* Track Your Journey Card (Full-width search container) */}
+      <section className="w-full">
+        <TrainSearchCard />
       </section>
-    </main>
+
+      {/* Live Train Status Card (Full-width lookup container) */}
+      <section className="w-full">
+        <LiveTrainStatusCard />
+      </section>
+
+      {/* About RailAlert AI & 4 Feature Cards */}
+      <section className="w-full">
+        <FeaturesSection />
+      </section>
+    </div>
   )
 }
 
