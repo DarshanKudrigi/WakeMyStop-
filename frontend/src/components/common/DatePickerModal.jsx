@@ -2,15 +2,14 @@ import { useState } from 'react'
 import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 
 function DatePickerModal({ isOpen, onClose, selectedDate, onSelectDate }) {
+  const initialDate = selectedDate ? new Date(selectedDate) : new Date()
+  const [currentMonth, setCurrentMonth] = useState(initialDate.getMonth())
+  const [currentYear, setCurrentYear] = useState(initialDate.getFullYear())
+
   if (!isOpen) return null
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-
-  // Parse currently selected date or default to today
-  const initialDate = selectedDate ? new Date(selectedDate) : new Date()
-  const [currentMonth, setCurrentMonth] = useState(initialDate.getMonth())
-  const [currentYear, setCurrentYear] = useState(initialDate.getFullYear())
 
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',

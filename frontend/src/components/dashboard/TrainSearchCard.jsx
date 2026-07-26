@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MapPin, Navigation, Calendar, ArrowUpDown, Train, ArrowRight, History } from 'lucide-react'
 import DatePickerModal from '../common/DatePickerModal'
@@ -13,27 +13,27 @@ function TrainSearchCard() {
   })
 
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
-  const [recentSearches, setRecentSearches] = useState([])
-
-  // Load recent searches from localStorage on mount
-  useEffect(() => {
+  const [recentSearches, setRecentSearches] = useState(() => {
     try {
-      const saved = localStorage.getItem('railalert_recent_searches')
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('railalert_recent_searches') : null
       if (saved) {
-        setRecentSearches(JSON.parse(saved))
-      } else {
-        // Pre-populate 2 default sample recent searches
-        const defaults = [
-          { from: 'Bengaluru Cantt (BNC)', to: 'Mysuru Junction (MYS)' },
-          { from: 'Mysuru Junction (MYS)', to: 'Hassan Junction (HAS)' },
-        ]
-        setRecentSearches(defaults)
+        return JSON.parse(saved)
+      }
+      const defaults = [
+        { from: 'Bengaluru Cantt (BNC)', to: 'Mysuru Junction (MYS)' },
+        { from: 'Mysuru Junction (MYS)', to: 'Hassan Junction (HAS)' },
+      ]
+      if (typeof window !== 'undefined') {
         localStorage.setItem('railalert_recent_searches', JSON.stringify(defaults))
       }
+      return defaults
     } catch {
-      // Fallback
+      return [
+        { from: 'Bengaluru Cantt (BNC)', to: 'Mysuru Junction (MYS)' },
+        { from: 'Mysuru Junction (MYS)', to: 'Hassan Junction (HAS)' },
+      ]
     }
-  }, [])
+  })
 
   const handleChange = (e) => {
     const { name, value } = e.target

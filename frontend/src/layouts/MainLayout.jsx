@@ -28,7 +28,7 @@ function MainLayout() {
           setUser(response.data.user)
         }
         setError('')
-      } catch (requestError) {
+      } catch {
         if (!mounted) return
         // Safe fallback user for local preview
         setUser({ name: 'Darshan', email: 'darshan@railalert.ai' })

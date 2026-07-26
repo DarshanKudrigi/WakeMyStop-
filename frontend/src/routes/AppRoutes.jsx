@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 
 import ProtectedRoute from '../components/ProtectedRoute'
 import DashboardPage from '../pages/DashboardPage'
+import TrainSearchResultsPage from '../pages/TrainSearchResultsPage'
+import TrainDetailsPage from '../pages/TrainDetailsPage'
 import LoginPage from '../pages/LoginPage'
 import RegisterPage from '../pages/RegisterPage'
 import MainLayout from '../layouts/MainLayout'
@@ -23,6 +25,22 @@ function AppRoutes() {
             element={
               <ProtectedRoute>
                 <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/journeys"
+            element={
+              <ProtectedRoute>
+                <TrainSearchResultsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/train/:trainNo"
+            element={
+              <ProtectedRoute>
+                <TrainDetailsPage />
               </ProtectedRoute>
             }
           />

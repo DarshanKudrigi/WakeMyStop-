@@ -1,25 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import CurrentJourneyCard from '../components/dashboard/CurrentJourneyCard'
 import TrainSearchCard from '../components/dashboard/TrainSearchCard'
 import LiveTrainStatusCard from '../components/dashboard/LiveTrainStatusCard'
 import FeaturesSection from '../components/dashboard/FeaturesSection'
 
 function DashboardPage() {
-  const [activeJourney, setActiveJourney] = useState(null)
-
-  // Load active journey from localStorage if confirmed by user
-  useEffect(() => {
+  const [activeJourney, setActiveJourney] = useState(() => {
     try {
-      const saved = localStorage.getItem('railalert_active_journey')
-      if (saved) {
-        setActiveJourney(JSON.parse(saved))
-      } else {
-        setActiveJourney(null)
-      }
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('railalert_active_journey') : null
+      return saved ? JSON.parse(saved) : null
     } catch {
-      setActiveJourney(null)
+      return null
     }
-  }, [])
+  })
 
   const handleCompleteJourney = () => {
     setActiveJourney(null)

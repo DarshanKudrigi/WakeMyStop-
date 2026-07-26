@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Train, ShieldCheck, Heart } from 'lucide-react'
+import { Train, ShieldCheck } from 'lucide-react'
 
 function Footer() {
   const currentYear = new Date().getFullYear()
