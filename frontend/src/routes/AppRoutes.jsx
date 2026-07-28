@@ -4,6 +4,7 @@ import ProtectedRoute from '../components/ProtectedRoute'
 import DashboardPage from '../pages/DashboardPage'
 import TrainSearchResultsPage from '../pages/TrainSearchResultsPage'
 import TrainDetailsPage from '../pages/TrainDetailsPage'
+import AlertPreferencesPage from '../pages/AlertPreferencesPage'
 import LoginPage from '../pages/LoginPage'
 import RegisterPage from '../pages/RegisterPage'
 import MainLayout from '../layouts/MainLayout'
@@ -38,6 +39,22 @@ function AppRoutes() {
           />
           <Route
             path="/train/:trainNo"
+            element={
+              <ProtectedRoute>
+                <TrainDetailsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/alert-preferences/:trainNo"
+            element={
+              <ProtectedRoute>
+                <AlertPreferencesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/journey/active/:trainNo"
             element={
               <ProtectedRoute>
                 <TrainDetailsPage />
