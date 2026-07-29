@@ -4,7 +4,7 @@
 
 export const RAIL_API_CONFIG = {
   BASE_URL: import.meta.env.VITE_RAIL_API_BASE_URL || 'https://api.railradar.in/v1',
-  API_KEY: import.meta.env.VITE_RAIL_API_KEY || 'rg_71538d00b823403fab29e05ee4ada98b',
+  API_KEY: import.meta.env.VITE_RAILRADAR_API_KEY || import.meta.env.VITE_RAIL_API_KEY || '',
   DEFAULT_TIMEOUT_MS: 10000,
   
   MAX_REQUESTS_PER_MINUTE: 100,

@@ -19,6 +19,21 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+/* Deep Charcoal Dark Mode Styling (Inspired by Linear & GitHub Dark) */
+.dark body,
+body.dark {
+  background-color: #0e1217 !important;
+  color: #e6edf3 !important;
+}
+
+.dark .bg-\[\#111936\] {
+  background-color: #161c26 !important;
+}
+
+.dark .bg-\[\#0b0f19\] {
+  background-color: #12161f !important;
+}
+
 a {
   color: inherit;
   text-decoration: none;

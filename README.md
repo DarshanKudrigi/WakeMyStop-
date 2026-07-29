@@ -1,182 +1,138 @@
-````markdown
-# 🚆 AI Train Notification & Smart Journey Assistant
+# 🚆 RailAlert AI — Smart Journey Assistant & Real-Time Train Tracker
 
-A smart train tracking application built using **React.js**, **Node.js**, **Express.js**, **MonongoDB**, and **Socket.IO**.
-and ai auentication
-
-This project helps users track their train, get live updates, receive important notifications, and use AI to get travel information.
+**RailAlert AI** is a modern, Apple-inspired smart train tracking platform built for everyday passengers. It combines real-time train route monitoring, live station board schedules, smart destination alarms, and a production-ready **RailRadar API** integration layer.
 
 ---
 
 ## ✨ Features
 
-- 🔐 User Login and Registration
-- 🚆 Live Train Tracking
-- 📍 Manage Train Trips
-- 🔔 Train Delay and Arrival Notifications
-- 🤖 AI Travel Assistant
-- 📱 Real-Time Train Updates
-- ⚡ Fast Data with Redis
-- ⏱️ Estimated Arrival Time (ETA)
-- 🛡️ Secure APIs
-- ✅ Input Validation
-- 📝 Error and Activity Logs
-- 📊 Notification History
+- 🚆 **Real-Time Train Tracking**: Interactive vertical railway track timeline displaying official halts, platform numbers, distance markers, and live delay status.
+- 🔔 **Smart Destination Alarms**: Custom station alerts (SMS, WhatsApp, sound alarms, vibration) before reaching your destination stop so you never miss a station.
+- 📊 **Active Journey Lifecycle Engine**: Centralized reactive state management tracking journey states (`Planned`, `Active`, `Completed`, `Cancelled`) with single-active-journey enforcement.
+- 📱 **Collapsible Search & Sticky Controls**: Collapsible search header that smoothly hides on scroll to maximize mobile screen real estate.
+- 🌙 **Deep Charcoal Dark Mode**: High-contrast, Apple/GitHub Dark-inspired theme that is easy on the eyes during nighttime travel.
+- ⚡ **API Abstraction & Caching**: Built-in TTL caching, in-flight request deduplication, and fallback mock adapters for zero API credit wastage during development.
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠️ Technology Stack
 
-### Backend
+### Frontend
+- **Framework**: React 19 + Vite 8
+- **Styling**: Tailwind CSS v4 + Vanilla CSS Design Tokens
+- **Icons**: Lucide React
+- **Routing**: React Router DOM v7
+- **State Management**: React Context (`JourneyContext`, `ThemeContext`)
 
-- Node.js
-- Express.js
-
-### Database
-
-- MongoDB
-- Mongoose
-
-### Authentication
-
-- JWT
-- bcrypt
-
-### Other Tools
-
-- Redis
-- BullMQ
-- Socket.IO
-
+### Backend & API
+- **Runtime**: Node.js + Express.js
+- **Database**: MongoDB + Mongoose
+- **Authentication**: JWT (JSON Web Tokens) + bcrypt
+- **External Integration**: RailRadar REST API v1.0
 
 ---
 
-## 📂 Project Structure
+## ⚙️ Environment Variables
 
-```text
-server/
-│
-├── src/
-│   ├── config/
-│   ├── controllers/
-│   ├── middlewares/
-│   ├── models/
-│   ├── routes/
-│   ├── services/
-│   ├── sockets/
-│   ├── workers/
-│   ├── utils/
-│   ├── app.js
-│   └── server.js
-│
-├── tests/
-└── package.json
+Copy `.env.example` to `.env` in both `backend` and `frontend` folders before running the app.
+
+### Backend (`backend/.env`)
+```env
+PORT=3000
+MONGO_URI=your_mongodb_connection_string
+JWT_SECRET=your_jwt_secret_key
+RAILRADAR_API_KEY=your_railradar_api_key
+```
+
+### Frontend (`frontend/.env`)
+```env
+VITE_API_URL=http://localhost:3000
+VITE_RAILRADAR_API_KEY=your_railradar_api_key
 ```
 
 ---
 
-## ⚙️ Installation
+## 🚀 Installation & Running the Project
 
-### Clone the Repository
-
+### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-username/AI-Train-Notification.git
+git clone https://github.com/DarshanKudrigi/WakeMyStop.git
+cd WakeMyStop
 ```
 
-### Go to the Project Folder
+### 2. Install Dependencies
 
+**Backend:**
 ```bash
-cd AI-Train-Notification/server
-```
-
-### Install Packages
-
-```bash
+cd backend
 npm install
 ```
 
-### Create a `.env` File
-
-```env
-PORT=5000
-
-MONGO_URI=
-
-JWT_SECRET=
-
-REDIS_URL=
-
-OPENAI_API_KEY=
+**Frontend:**
+```bash
+cd ../frontend
+npm install
 ```
 
-### Start the Server
+### 3. Run Development Servers
 
+**Backend Server (Runs on `http://localhost:3000`):**
 ```bash
+cd backend
+npm run dev
+```
+
+**Frontend Server (Runs on `http://localhost:5173`):**
+```bash
+cd frontend
 npm run dev
 ```
 
 ---
 
-## 📌 Main Modules
-
-### Authentication
-
-- Register a new user
-- Login
-- View user profile
-
-### Trips
-
-- Create a trip
-- View trips
-- Update a trip
-- Delete a trip
-
-### Train
-
-- Search trains
-- View live train status
-- Get train details
-
-### AI
-
-- Ask travel-related questions
-- Predict train arrival time
-
----
-
-## 🔄 How It Works
+## 📁 Project Structure (Brief)
 
 ```text
-User
-   │
-   ▼
-Routes
-   │
-   ▼
-Controllers
-   │
-   ▼
-Services
-   │
-   ├── MongoDB
-   ├── Redis
-   └── AI / Train APIs
+WakeMyStop/
+├── backend/
+│   ├── src/
+│   │   ├── config/             # DB & Environment Config
+│   │   ├── controllers/        # Route Handlers
+│   │   ├── middleware/         # Auth & Validation
+│   │   ├── models/             # Database Models
+│   │   ├── routes/             # API Routes
+│   │   └── services/           # RailRadar API Integration & Caching Layer
+│   └── .env.example
+├── frontend/
+│   ├── src/
+│   │   ├── components/         # Dashboard, Route Timeline, Sticky Footer
+│   │   ├── context/            # JourneyContext, ThemeContext
+│   │   ├── pages/              # Dashboard, SearchResults, TrainDetails, Preferences
+│   │   └── services/           # Journey Engine, Auto-Refresh, Notification Service
+│   └── .env.example
+└── docs/                       # Architecture Guides & Payload Documentation
 ```
 
 ---
 
-## 🚀 Future Improvements
+## 🔮 Future Improvements
 
-- 📱 Android/iOS App
-- 🌍 Multiple Language Support
-- 📧 Email Notifications
-- 📲 WhatsApp Notifications
-- 📊 Dashboard for Train Analytics
+- 💬 **Crowd-Sourced Live Location**: Real-time position sharing from passengers inside the train.
+- 📞 **Automated IVR Phone Call Alarms**: Fallback voice call alerts for sleeping passengers in poor data connectivity zones.
+- 📱 **Mobile Native Apps**: React Native iOS and Android application builds.
 
 ---
 
-## ⭐ Support
+## 🤝 Contributing
 
-If you found this project helpful, please give it a ⭐ on GitHub.
-````
+Contributions are welcome! Feel free to open an issue or submit a pull request for improvements and bug fixes.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+If you found this project useful, consider giving it a ⭐ on GitHub.

@@ -1,6 +1,6 @@
-import { ShieldCheck, AlertTriangle, CheckCircle2, ArrowRight } from 'lucide-react'
+import { ShieldCheck, AlertTriangle, CheckCircle2, ArrowRight, Trash2 } from 'lucide-react'
 
-function TrainSummaryCard({ train, onConfirmClick }) {
+function TrainSummaryCard({ train, onConfirmClick, onCancelClick, isJourneyConfirmed }) {
   if (!train) return null
 
   const isDelayed = train.isDelayed
@@ -31,7 +31,7 @@ function TrainSummaryCard({ train, onConfirmClick }) {
         </span>
       </div>
 
-      {/* Row 2 (Bottom): Route (From → To) & Total Distance + Confirm Button */}
+      {/* Row 2 (Bottom): Route (From → To) & Total Distance + Mode 1 / Mode 2 Action Button */}
       <div className="flex items-center justify-between gap-4 pt-1 border-t border-slate-100 dark:border-slate-800/80">
         
         {/* Route & Total Distance */}
@@ -47,15 +47,26 @@ function TrainSummaryCard({ train, onConfirmClick }) {
           </div>
         </div>
 
-        {/* Confirm Journey Button */}
-        <button
-          type="button"
-          onClick={onConfirmClick}
-          className="py-2.5 px-5 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2 shrink-0 min-h-[40px]"
-        >
-          <ShieldCheck className="w-4 h-4 text-blue-100" />
-          <span>Confirm Journey</span>
-        </button>
+        {/* MODE 1: Confirm Journey Button | MODE 2: Red Outlined Cancel Journey Button */}
+        {isJourneyConfirmed ? (
+          <button
+            type="button"
+            onClick={onCancelClick}
+            className="py-2 px-4 rounded-xl border border-rose-500/80 hover:border-rose-600 bg-rose-50/50 dark:bg-rose-950/30 hover:bg-rose-100 text-rose-600 dark:text-rose-400 font-black text-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[38px]"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Cancel Journey</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onConfirmClick}
+            className="py-2.5 px-5 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2 shrink-0 min-h-[40px]"
+          >
+            <ShieldCheck className="w-4 h-4 text-blue-100" />
+            <span>Confirm Journey</span>
+          </button>
+        )}
 
       </div>
 

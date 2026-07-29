@@ -170,6 +170,17 @@ const ImportantStopsCard = forwardRef(function ImportantStopsCard({ train }, ref
         })}
       </div>
 
+      {/* Route Termination END Marker */}
+      <div id="route-end-marker" className="flex items-center justify-center pt-6 pb-2 relative">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t-2 border-slate-300 dark:border-slate-700" />
+        </div>
+        <span className="relative px-4 py-1 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-black rounded-full border border-slate-700 dark:border-slate-300 shadow-md uppercase tracking-wider flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+          <span>END</span>
+        </span>
+      </div>
+
     </div>
   )
 })

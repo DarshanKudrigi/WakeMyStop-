@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react'
-import { useSearchParams, Link, useNavigate } from 'react-router-dom'
+import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { mockTrains } from '../data/trainsData'
 import TrainCard from '../components/journey/TrainCard'
-import { ArrowRight, ChevronRight, SlidersHorizontal, Train, Calendar, X, CheckCircle, Bell } from 'lucide-react'
+import { ArrowRight, SlidersHorizontal, Train, Calendar } from 'lucide-react'
 import { calculateAiRecommendations, timeToMinutes } from '../utils/aiRecommendationEngine'
 
 const filterCategories = [
@@ -41,9 +41,24 @@ function TrainSearchResultsPage() {
   // Loading state for smooth transitions
   const [isLoading, setIsLoading] = useState(false)
 
-  // Modal State for Journey Confirmation
-  const [confirmingTrain, setConfirmingTrain] = useState(null)
-  const [alertTime, setAlertTime] = useState('15 Mins Before Departure')
+  // Throttled scroll listener state for showing the constant-height compact toolbar
+  const [showCompactBar, setShowCompactBar] = useState(false)
+
+  useEffect(() => {
+    let ticking = false
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          setShowCompactBar(window.scrollY > 140)
+          ticking = false
+        })
+        ticking = true
+      }
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    handleScroll()
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   // Handlers for filter and date changes with quick smooth loading state
   const handleDateChange = (newDate) => {
@@ -102,18 +117,16 @@ function TrainSearchResultsPage() {
     })
   }
 
-  // Filter and sort trains dynamically (Chronological 24-hour time sorting)
+  // Filter and sort trains dynamically
   const filteredAndSortedTrains = useMemo(() => {
     let result = [...mockTrains]
 
-    // Category filter
     if (activeFilter !== 'All') {
       result = result.filter(
         (t) => t.category.toLowerCase() === activeFilter.toLowerCase()
       )
     }
 
-    // Sort logic
     result.sort((a, b) => {
       if (sortBy === 'duration') {
         return a.durationMinutes - b.durationMinutes
@@ -121,131 +134,132 @@ function TrainSearchResultsPage() {
       if (sortBy === 'arrival') {
         return timeToMinutes(a.arrivalTime) - timeToMinutes(b.arrivalTime)
       }
-      // Default: departure time
       return timeToMinutes(a.departureTime) - timeToMinutes(b.departureTime)
     })
 
     return result
   }, [activeFilter, sortBy])
 
-  // Handle final journey confirmation inside modal
-  const handleFinalConfirm = () => {
-    if (!confirmingTrain) return
-    const activeJourney = {
-      trainNo: confirmingTrain.trainNo,
-      trainName: confirmingTrain.trainName,
-      from: confirmingTrain.from,
-      to: confirmingTrain.to,
-      departureTime: confirmingTrain.departureTime,
-      date: selectedDate,
-      alertTime: alertTime,
-      confirmedAt: new Date().toISOString(),
-    }
-    localStorage.setItem('railalert_active_journey', JSON.stringify(activeJourney))
-    setConfirmingTrain(null)
-    navigate(`/train/${confirmingTrain.trainNo}`)
+  // Enforce flow: Clicking a train card navigates to Train Details page
+  const handleSelectTrain = (train) => {
+    navigate(`/train/${train.trainNo}`)
   }
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-6 pb-12">
+    <div className="w-full max-w-6xl mx-auto space-y-6 pb-12 pt-2">
       
-      {/* Clean Breadcrumb Navigation */}
-      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">
-        <Link to="/dashboard" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-          Dashboard
-        </Link>
-        <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-        <span className="text-slate-900 dark:text-white font-extrabold">Train Search Results</span>
-      </nav>
+      {/* 1. COMPACT STICKY TOOLBAR (Constant 56px height, zero layout shifts, opacity & transform animation ONLY) */}
+      <div
+        className={`sticky top-2 z-30 h-14 -mx-2 px-2 transition-all duration-200 ease-in-out ${
+          showCompactBar
+            ? 'opacity-100 translate-y-0 pointer-events-auto'
+            : 'opacity-0 -translate-y-3 pointer-events-none'
+        }`}
+      >
+        <div className="w-full h-full bg-white/95 dark:bg-[#161c26]/95 backdrop-blur-md rounded-2xl border border-slate-200/90 dark:border-slate-800/90 px-4 flex items-center justify-between shadow-md">
+          {/* Route Summary */}
+          <div className="flex items-center gap-2 text-xs sm:text-sm font-black text-slate-900 dark:text-white truncate">
+            <span>{fromStation.split('(')[0].trim()} → {toStation.split('(')[0].trim()}</span>
+            <span className="text-slate-400 font-bold text-xs">({filteredAndSortedTrains.length})</span>
+          </div>
 
-      {/* STICKY HEADER SECTION (Route, Date, Calendar, Sort, Filter Chips) */}
-      <div className="sticky top-0 z-30 bg-slate-50/95 dark:bg-[#0b0f19]/95 backdrop-blur-md pt-2 pb-3 space-y-4 -mx-2 px-2 shadow-xs">
-        
-        {/* Page Title & Route Header Block (Route -> Date -> Calendar -> Sort) */}
-        <div className="w-full bg-white dark:bg-[#111936] rounded-3xl border border-slate-200/90 dark:border-slate-800/90 p-5 sm:p-6 shadow-md shadow-blue-500/5 space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            
-            {/* Station Origin -> Destination Display & Selected Date */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-3 text-lg sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight flex-wrap">
-                <span>{fromStation.split('(')[0].trim()}</span>
-                <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 dark:text-blue-400 shrink-0 stroke-[2.5]" />
-                <span>{toStation.split('(')[0].trim()}</span>
-              </div>
-              <p className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                <span>📅 {formatDateDisplay(selectedDate)}</span>
-                {dateMode === 'FUTURE' && (
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
-                    Future Date
-                  </span>
-                )}
-                {dateMode === 'PAST' && (
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
-                    Past Date
-                  </span>
-                )}
-              </p>
-            </div>
+          {/* Controls ONLY: Date & Sort */}
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="compact-date-input"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-extrabold text-slate-900 dark:text-white cursor-pointer"
+            >
+              <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <input
+                id="compact-date-input"
+                type="date"
+                value={selectedDate}
+                onChange={(e) => handleDateChange(e.target.value)}
+                className="bg-transparent text-xs font-black text-slate-900 dark:text-white focus:outline-none cursor-pointer w-28"
+              />
+            </label>
 
-            {/* Top-Right Controls Section: Calendar Button & Sort Dropdown */}
-            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full md:w-auto">
-              
-              {/* Trains Found Badge */}
-              <span className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-blue-600/10 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400 font-black text-xs sm:text-sm border border-blue-500/20 shadow-xs min-h-[42px]">
-                <Train className="w-4 h-4" />
-                <span>{filteredAndSortedTrains.length} Trains</span>
-              </span>
-
-              {/* Date Selector: Entire Container Clickable */}
-              <label
-                htmlFor="mobile-date-input"
-                onClick={(e) => {
-                  const input = e.currentTarget.querySelector('input')
-                  if (input && typeof input.showPicker === 'function') {
-                    try { input.showPicker() } catch { /* Ignore */ }
-                  }
-                }}
-                className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/80 shadow-xs cursor-pointer hover:bg-slate-200/70 dark:hover:bg-slate-700/70 transition-colors flex-1 sm:flex-none justify-between sm:justify-start min-h-[42px]"
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-extrabold text-slate-900 dark:text-white">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <select
+                value={sortBy}
+                onChange={(e) => handleSortChange(e.target.value)}
+                className="bg-transparent text-xs font-black text-slate-900 dark:text-white focus:outline-none cursor-pointer"
               >
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400 sm:hidden">Date:</span>
-                </div>
-                <input
-                  id="mobile-date-input"
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => handleDateChange(e.target.value)}
-                  className="bg-transparent text-xs font-extrabold text-slate-900 dark:text-white focus:outline-none cursor-pointer"
-                  title="Select Travel Date"
-                />
-              </label>
-
-              {/* Sort Dropdown Container */}
-              <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/80 shadow-xs flex-1 sm:flex-none justify-between sm:justify-start min-h-[42px]">
-                <SlidersHorizontal className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                <label htmlFor="sort-select" className="text-xs font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">Sort:</label>
-                <select
-                  id="sort-select"
-                  value={sortBy}
-                  onChange={(e) => handleSortChange(e.target.value)}
-                  className="bg-transparent text-xs font-black text-slate-900 dark:text-white focus:outline-none cursor-pointer pr-1"
-                >
-                  {sortOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value} className="bg-white dark:bg-[#111936] text-slate-900 dark:text-white font-semibold">
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
+                {sortOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value} className="bg-white dark:bg-[#161c26]">
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
-
           </div>
         </div>
+      </div>
 
-        {/* Filter Chips Bar (Dynamic counts) */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+      {/* 2. MAIN HEADER (In Normal Document Flow - Scrolls away naturally without layout thrashing) */}
+      <div className="w-full bg-white dark:bg-[#161c26] rounded-3xl border border-slate-200/90 dark:border-slate-800/90 p-5 sm:p-6 shadow-md shadow-blue-500/5 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          
+          {/* Station Origin -> Destination Display & Selected Date */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-3 text-lg sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight flex-wrap">
+              <span>{fromStation.split('(')[0].trim()}</span>
+              <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 dark:text-blue-400 shrink-0 stroke-[2.5]" />
+              <span>{toStation.split('(')[0].trim()}</span>
+            </div>
+            <p className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 flex items-center gap-2">
+              <span>📅 {formatDateDisplay(selectedDate)}</span>
+              {dateMode === 'FUTURE' && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
+                  Future Date
+                </span>
+              )}
+            </p>
+          </div>
+
+          {/* Controls: Trains Badge, Date Selector, Sort Dropdown */}
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full md:w-auto">
+            <span className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-blue-600/10 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400 font-black text-xs sm:text-sm border border-blue-500/20 shadow-xs min-h-[42px]">
+              <Train className="w-4 h-4" />
+              <span>{filteredAndSortedTrains.length} Trains</span>
+            </span>
+
+            <label
+              htmlFor="main-date-input"
+              className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/80 shadow-xs cursor-pointer hover:bg-slate-200/70 transition-colors flex-1 sm:flex-none min-h-[42px]"
+            >
+              <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+              <input
+                id="main-date-input"
+                type="date"
+                value={selectedDate}
+                onChange={(e) => handleDateChange(e.target.value)}
+                className="bg-transparent text-xs font-extrabold text-slate-900 dark:text-white focus:outline-none cursor-pointer"
+              />
+            </label>
+
+            <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/80 shadow-xs flex-1 sm:flex-none min-h-[42px]">
+              <SlidersHorizontal className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">Sort:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => handleSortChange(e.target.value)}
+                className="bg-transparent text-xs font-black text-slate-900 dark:text-white focus:outline-none cursor-pointer pr-1"
+              >
+                {sortOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value} className="bg-white dark:bg-[#161c26] text-slate-900 dark:text-white font-semibold">
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Filter Chips Bar */}
+        <div className="flex items-center gap-2 overflow-x-auto pt-2 pb-1 scrollbar-none border-t border-slate-100 dark:border-slate-800/80">
           {filterCategories.map((cat) => {
             const isActive = activeFilter === cat
             const count = categoryCounts[cat] || 0
@@ -254,15 +268,15 @@ function TrainSearchResultsPage() {
                 key={cat}
                 type="button"
                 onClick={() => handleFilterChange(cat)}
-                className={`py-2.5 px-4 rounded-2xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                className={`py-2 px-3.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
                   isActive
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25 scale-[1.02]'
-                    : 'bg-white dark:bg-[#111936] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-800/80 hover:bg-blue-50 dark:hover:bg-slate-800 hover:text-blue-600'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 hover:bg-blue-50 dark:hover:bg-slate-700 hover:text-blue-600'
                 }`}
               >
                 <span>{cat}</span>
                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
-                  isActive ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                  isActive ? 'bg-white/20 text-white' : 'bg-white/60 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
                 }`}>
                   ({count})
                 </span>
@@ -270,13 +284,11 @@ function TrainSearchResultsPage() {
             )
           })}
         </div>
-
       </div>
 
-      {/* SIMPLIFIED AI SMART RECOMMENDATIONS BLOCK (Max 2 Cards, Highlighted) */}
+      {/* 3. AI RECOMMENDATIONS BLOCK */}
       {!isLoading && aiRecommendations.length > 0 && (
-        <div className="w-full bg-white dark:bg-[#111936] rounded-3xl border border-blue-200/80 dark:border-slate-800/90 p-5 sm:p-6 space-y-4 shadow-sm">
-          {/* Clean Simplified Header */}
+        <div className="w-full bg-white dark:bg-[#161c26] rounded-3xl border border-blue-200/80 dark:border-slate-800/90 p-5 sm:p-6 space-y-4 shadow-sm">
           <div className="flex items-center gap-2.5">
             <span className="text-xl">🤖</span>
             <div>
@@ -289,7 +301,6 @@ function TrainSearchResultsPage() {
             </div>
           </div>
 
-          {/* Max 2 Recommendation Cards Grid (Highlighted via isRecommendedCard) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {aiRecommendations.map((rec) => (
               <TrainCard
@@ -298,180 +309,48 @@ function TrainSearchResultsPage() {
                 selectedDate={selectedDate}
                 dateMode={dateMode}
                 isRecommendedCard={true}
-                onConfirmClick={(t) => setConfirmingTrain(t)}
+                onConfirmClick={(t) => handleSelectTrain(t)}
               />
             ))}
           </div>
         </div>
       )}
 
-      {/* LOADING STATE SKELETONS */}
+      {/* 4. TRAIN LIST RESULTS */}
       {isLoading ? (
         <div className="space-y-4 pt-2">
           {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className="w-full bg-white dark:bg-[#111936] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4 animate-pulse"
+              className="w-full bg-white dark:bg-[#161c26] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4 animate-pulse"
             >
-              <div className="flex items-center justify-between">
-                <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-lg w-1/3"></div>
-                <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-lg w-1/6"></div>
-              </div>
+              <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-lg w-1/3"></div>
               <div className="h-10 bg-slate-100 dark:bg-slate-800/60 rounded-xl"></div>
-              <div className="flex items-center justify-between pt-2">
-                <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-lg w-1/4"></div>
-                <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-xl w-1/4"></div>
-              </div>
             </div>
           ))}
         </div>
       ) : (
-        <>
-          {/* Normal Train List Header Label */}
-          <div className="pt-2 flex items-center justify-between">
-            <h3 className="text-xs font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              All Available Services ({filteredAndSortedTrains.length})
-            </h3>
-          </div>
-
-          {/* Vertical Train List Cards (Original Chronological Order Unchanged) */}
-          <div className="space-y-4">
-            {filteredAndSortedTrains.length > 0 ? (
-              filteredAndSortedTrains.map((train) => (
-                <TrainCard
-                  key={train.id}
-                  train={train}
-                  selectedDate={selectedDate}
-                  dateMode={dateMode}
-                  onConfirmClick={(t) => setConfirmingTrain(t)}
-                />
-              ))
-            ) : (
-              /* FRIENDLY EMPTY STATE */
-              <div className="bg-white dark:bg-[#111936] rounded-3xl border border-slate-200 dark:border-slate-800 p-10 text-center space-y-4 shadow-sm">
-                <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-500 mx-auto flex items-center justify-center font-bold text-3xl">
-                  🚆
-                </div>
-                <div className="space-y-1.5 max-w-md mx-auto">
-                  <h3 className="text-xl font-black text-slate-900 dark:text-white">
-                    No trains available
-                  </h3>
-                  <p className="text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400">
-                    No train services match your selected category filter ("{activeFilter}") or travel date ({formatDateDisplay(selectedDate)}). Try adjusting your category filters or choosing a different travel date.
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setActiveFilter('All')}
-                    className="py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs shadow-md cursor-pointer transition-colors"
-                  >
-                    Reset Category Filters
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedDate(todayStr)}
-                    className="py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 font-extrabold text-xs cursor-pointer border border-slate-200 dark:border-slate-700 transition-colors"
-                  >
-                    Select Today's Date
-                  </button>
-                </div>
+        <div className="space-y-4 pt-2">
+          {filteredAndSortedTrains.length > 0 ? (
+            filteredAndSortedTrains.map((train) => (
+              <TrainCard
+                key={train.id}
+                train={train}
+                selectedDate={selectedDate}
+                dateMode={dateMode}
+                onConfirmClick={(t) => handleSelectTrain(t)}
+              />
+            ))
+          ) : (
+            <div className="bg-white dark:bg-[#161c26] rounded-3xl border border-slate-200 dark:border-slate-800 p-10 text-center space-y-4 shadow-sm">
+              <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-500 mx-auto flex items-center justify-center font-bold text-3xl">
+                🚆
               </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* CONFIRMATION MODAL DIALOG (Requirement 10) */}
-      {confirmingTrain && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-white dark:bg-[#111936] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-150">
-            
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-blue-600/10 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
-                  <CheckCircle className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-slate-900 dark:text-white">
-                    Confirm Your Journey
-                  </h3>
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    Review journey details before activating live alert tracking
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setConfirmingTrain(null)}
-                className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                No trains available
+              </h3>
             </div>
-
-            {/* Train Info Summary Grid */}
-            <div className="space-y-3 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 text-xs">
-              <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/60 pb-2">
-                <span className="font-bold text-slate-500 dark:text-slate-400">Train Name:</span>
-                <span className="font-black text-slate-900 dark:text-white text-sm">{confirmingTrain.trainName}</span>
-              </div>
-              
-              <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/60 pb-2">
-                <span className="font-bold text-slate-500 dark:text-slate-400">Train Number:</span>
-                <span className="font-mono font-black text-blue-600 dark:text-blue-400">#{confirmingTrain.trainNo}</span>
-              </div>
-
-              <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/60 pb-2">
-                <span className="font-bold text-slate-500 dark:text-slate-400">Route:</span>
-                <span className="font-black text-slate-900 dark:text-white">{confirmingTrain.from} → {confirmingTrain.to}</span>
-              </div>
-
-              <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/60 pb-2">
-                <span className="font-bold text-slate-500 dark:text-slate-400">Travel Date:</span>
-                <span className="font-extrabold text-slate-900 dark:text-white">{formatDateDisplay(selectedDate)}</span>
-              </div>
-
-              {/* Alert Time Selection */}
-              <div className="pt-1 space-y-1.5">
-                <label className="font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <Bell className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                  <span>Configure Station Alert Notification:</span>
-                </label>
-                <select
-                  value={alertTime}
-                  onChange={(e) => setAlertTime(e.target.value)}
-                  className="w-full p-2.5 rounded-xl bg-white dark:bg-[#111936] border border-slate-300 dark:border-slate-700 font-extrabold text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                >
-                  <option value="10 Mins Before Departure">10 Mins Before Departure</option>
-                  <option value="15 Mins Before Departure">15 Mins Before Departure</option>
-                  <option value="30 Mins Before Departure">30 Mins Before Departure</option>
-                  <option value="15 Mins Before Arrival">15 Mins Before Destination Arrival</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Modal Actions */}
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setConfirmingTrain(null)}
-                className="py-2.5 px-5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-extrabold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-colors border border-slate-200 dark:border-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleFinalConfirm}
-                className="py-2.5 px-6 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs shadow-md active:scale-[0.98] cursor-pointer transition-all flex items-center gap-2"
-              >
-                <CheckCircle className="w-4 h-4" />
-                <span>Confirm & Activate Journey</span>
-              </button>
-            </div>
-
-          </div>
+          )}
         </div>
       )}
 
