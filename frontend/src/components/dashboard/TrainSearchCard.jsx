@@ -1,27 +1,42 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MapPin, Navigation, Calendar, ArrowUpDown, Train, ArrowRight, History } from 'lucide-react'
+import { MapPin, Navigation, Calendar, ArrowUpDown, Train, ArrowRight, History, AlertCircle } from 'lucide-react'
 import DatePickerModal from '../common/DatePickerModal'
+import { searchStations } from '../../services/stationSearchService'
+import { extractStationCode } from '../../services/trainService'
+import { getLocalTodayDateStr, formatLocalDateDisplay } from '../../utils/dateUtils'
 
 function TrainSearchCard() {
   const navigate = useNavigate()
 
   const [formData, setFormData] = useState({
-    fromStation: 'Bengaluru Cantt (BNC)',
-    toStation: 'Mysuru Junction (MYS)',
-    journeyDate: new Date().toISOString().split('T')[0],
+    fromStation: 'KSR BENGALURU (SBC)',
+    toStation: 'MYSURU JN (MYS)',
+    journeyDate: getLocalTodayDateStr(),
   })
+
+  // Pre-flight Validation Error state
+  const [validationError, setValidationError] = useState('')
+
+  // Single Request Lifecycle Lock
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Autocomplete states
+  const [fromSuggestions, setFromSuggestions] = useState([])
+  const [toSuggestions, setToSuggestions] = useState([])
+  const [activeInput, setActiveInput] = useState(null) // 'from' | 'to' | null
+
+  const fromContainerRef = useRef(null)
+  const toContainerRef = useRef(null)
 
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
   const [recentSearches, setRecentSearches] = useState(() => {
     try {
       const saved = typeof window !== 'undefined' ? localStorage.getItem('railalert_recent_searches') : null
-      if (saved) {
-        return JSON.parse(saved)
-      }
+      if (saved) return JSON.parse(saved)
       const defaults = [
-        { from: 'Bengaluru Cantt (BNC)', to: 'Mysuru Junction (MYS)' },
-        { from: 'Mysuru Junction (MYS)', to: 'Hassan Junction (HAS)' },
+        { from: 'KSR BENGALURU (SBC)', to: 'MYSURU JN (MYS)' },
+        { from: 'MYSURU JN (MYS)', to: 'HASAN (HAS)' },
       ]
       if (typeof window !== 'undefined') {
         localStorage.setItem('railalert_recent_searches', JSON.stringify(defaults))
@@ -29,15 +44,72 @@ function TrainSearchCard() {
       return defaults
     } catch {
       return [
-        { from: 'Bengaluru Cantt (BNC)', to: 'Mysuru Junction (MYS)' },
-        { from: 'Mysuru Junction (MYS)', to: 'Hassan Junction (HAS)' },
+        { from: 'KSR BENGALURU (SBC)', to: 'MYSURU JN (MYS)' },
+        { from: 'MYSURU JN (MYS)', to: 'HASAN (HAS)' },
       ]
     }
   })
 
-  const handleChange = (e) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+  // Close dropdowns on click outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (
+        fromContainerRef.current &&
+        !fromContainerRef.current.contains(e.target) &&
+        toContainerRef.current &&
+        !toContainerRef.current.contains(e.target)
+      ) {
+        setActiveInput(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // 250ms Debounced From Station Search
+  useEffect(() => {
+    if (activeInput !== 'from') return
+    const timer = setTimeout(() => {
+      const results = searchStations(formData.fromStation, 10)
+      setFromSuggestions(results)
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [formData.fromStation, activeInput])
+
+  // 250ms Debounced To Station Search
+  useEffect(() => {
+    if (activeInput !== 'to') return
+    const timer = setTimeout(() => {
+      const results = searchStations(formData.toStation, 10)
+      setToSuggestions(results)
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [formData.toStation, activeInput])
+
+  const handleFromChange = (e) => {
+    const val = e.target.value
+    setFormData((prev) => ({ ...prev, fromStation: val }))
+    setValidationError('')
+    setActiveInput('from')
+  }
+
+  const handleToChange = (e) => {
+    const val = e.target.value
+    setFormData((prev) => ({ ...prev, toStation: val }))
+    setValidationError('')
+    setActiveInput('to')
+  }
+
+  const selectFromStation = (st) => {
+    setFormData((prev) => ({ ...prev, fromStation: `${st.name} (${st.code})` }))
+    setValidationError('')
+    setActiveInput(null)
+  }
+
+  const selectToStation = (st) => {
+    setFormData((prev) => ({ ...prev, toStation: `${st.name} (${st.code})` }))
+    setValidationError('')
+    setActiveInput(null)
   }
 
   const handleSwap = () => {
@@ -46,6 +118,8 @@ function TrainSearchCard() {
       fromStation: prev.toStation,
       toStation: prev.fromStation,
     }))
+    setValidationError('')
+    setActiveInput(null)
   }
 
   const handleRecentClick = (item) => {
@@ -54,10 +128,38 @@ function TrainSearchCard() {
       fromStation: item.from,
       toStation: item.to,
     }))
+    setValidationError('')
+    setActiveInput(null)
   }
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    if (isSubmitting) return // Ignore duplicate clicks
+    setActiveInput(null)
+
+    const fromCode = extractStationCode(formData.fromStation)
+    const toCode = extractStationCode(formData.toStation)
+
+    // LOCAL PRE-FLIGHT VALIDATION
+    if (!formData.fromStation || !fromCode) {
+      setValidationError('Please select a valid origin station.')
+      return
+    }
+    if (!formData.toStation || !toCode) {
+      setValidationError('Please select a valid destination station.')
+      return
+    }
+    if (fromCode === toCode) {
+      setValidationError('Origin and Destination stations cannot be the same.')
+      return
+    }
+    if (!formData.journeyDate) {
+      setValidationError('Please select a valid journey date.')
+      return
+    }
+
+    setValidationError('')
+    setIsSubmitting(true)
 
     // Save to recent searches (keep last 3 unique)
     try {
@@ -78,26 +180,10 @@ function TrainSearchCard() {
       date: formData.journeyDate,
     }).toString()
 
-    navigate(`/journeys?${queryParams}`)
-  }
-
-  // Helper for station code tag
-  const getStationCode = (stationStr) => {
-    const match = stationStr.match(/\(([^)]+)\)/)
-    return match ? match[1] : stationStr.slice(0, 3).toUpperCase()
-  }
-
-  // Format date display (e.g. 2026-07-26 -> Sun, 26 Jul 2026)
-  const formatFormattedDate = (dateStr) => {
-    if (!dateStr) return ''
-    const d = new Date(dateStr)
-    if (isNaN(d.getTime())) return dateStr
-    return d.toLocaleDateString('en-US', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    })
+    setTimeout(() => {
+      setIsSubmitting(false)
+      navigate(`/journeys?${queryParams}`)
+    }, 150)
   }
 
   return (
@@ -118,13 +204,21 @@ function TrainSearchCard() {
         </div>
       </div>
 
+      {/* Pre-Flight Validation Alert Banner */}
+      {validationError && (
+        <div className="mb-4 p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{validationError}</span>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-5">
         
         {/* Main Station Stack */}
         <div className="space-y-4">
           
-          {/* From Station */}
-          <div>
+          {/* From Station with Autocomplete */}
+          <div className="relative" ref={fromContainerRef}>
             <label htmlFor="fromStation" className="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
               From Station (Origin)
@@ -138,17 +232,42 @@ function TrainSearchCard() {
                 id="fromStation"
                 name="fromStation"
                 value={formData.fromStation}
-                onChange={handleChange}
-                placeholder="Origin Station Name or Code (e.g. BNC, SBC)"
+                onChange={handleFromChange}
+                onFocus={() => setActiveInput('from')}
+                placeholder="Type Station Name, Code or City (e.g. MYS, Bangalore)"
                 className="w-full pl-12 pr-24 py-4 bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-2xl text-base font-bold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-800 transition-all shadow-inner"
+                autoComplete="off"
                 required
               />
               <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
                 <span className="px-2.5 py-1 rounded-lg bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 font-mono text-xs font-black border border-blue-200 dark:border-blue-800">
-                  {getStationCode(formData.fromStation)}
+                  {extractStationCode(formData.fromStation)}
                 </span>
               </div>
             </div>
+
+            {/* From Station Suggestions Dropdown Overlay */}
+            {activeInput === 'from' && fromSuggestions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 z-50 mt-1.5 bg-white dark:bg-[#161c26] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                {fromSuggestions.map((st) => (
+                  <button
+                    key={`from-${st.code}`}
+                    type="button"
+                    onClick={() => selectFromStation(st)}
+                    className="w-full px-4 py-3 text-left hover:bg-blue-50 dark:hover:bg-slate-800/80 transition-colors flex items-center justify-between group cursor-pointer"
+                  >
+                    <div className="min-w-0 pr-2">
+                      <span className="text-sm font-black text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 block truncate">
+                        {st.name} {st.aliasName && <span className="text-xs font-bold text-slate-400 dark:text-slate-500">({st.aliasName})</span>}
+                      </span>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 group-hover:bg-blue-600 group-hover:text-white font-mono text-xs font-black text-slate-700 dark:text-slate-300 transition-colors shrink-0">
+                      {st.code}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Swap Stations Button */}
@@ -166,8 +285,8 @@ function TrainSearchCard() {
             </button>
           </div>
 
-          {/* To Station */}
-          <div>
+          {/* To Station with Autocomplete */}
+          <div className="relative" ref={toContainerRef}>
             <label htmlFor="toStation" className="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
               To Station (Destination)
@@ -181,21 +300,47 @@ function TrainSearchCard() {
                 id="toStation"
                 name="toStation"
                 value={formData.toStation}
-                onChange={handleChange}
-                placeholder="Destination Station Name or Code (e.g. MYS)"
+                onChange={handleToChange}
+                onFocus={() => setActiveInput('to')}
+                placeholder="Type Destination Station Name, Code or City (e.g. MYS, Mysore)"
                 className="w-full pl-12 pr-24 py-4 bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-2xl text-base font-bold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-800 transition-all shadow-inner"
+                autoComplete="off"
                 required
               />
               <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
                 <span className="px-2.5 py-1 rounded-lg bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 font-mono text-xs font-black border border-rose-200 dark:border-rose-800">
-                  {getStationCode(formData.toStation)}
+                  {extractStationCode(formData.toStation)}
                 </span>
               </div>
             </div>
+
+            {/* To Station Suggestions Dropdown Overlay */}
+            {activeInput === 'to' && toSuggestions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 z-50 mt-1.5 bg-white dark:bg-[#161c26] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                {toSuggestions.map((st) => (
+                  <button
+                    key={`to-${st.code}`}
+                    type="button"
+                    onClick={() => selectToStation(st)}
+                    className="w-full px-4 py-3 text-left hover:bg-rose-50 dark:hover:bg-slate-800/80 transition-colors flex items-center justify-between group cursor-pointer"
+                  >
+                    <div className="min-w-0 pr-2">
+                      <span className="text-sm font-black text-slate-900 dark:text-white group-hover:text-rose-600 dark:group-hover:text-rose-400 block truncate">
+                        {st.name} {st.aliasName && <span className="text-xs font-bold text-slate-400 dark:text-slate-500">({st.aliasName})</span>}
+                      </span>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 group-hover:bg-rose-600 group-hover:text-white font-mono text-xs font-black text-slate-700 dark:text-slate-300 transition-colors shrink-0">
+                      {st.code}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+
         </div>
 
-        {/* Journey Date Picker (Opens Custom Calendar Modal) */}
+        {/* Journey Date Picker */}
         <div>
           <label htmlFor="journeyDate" className="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
             📅 Journey Date
@@ -210,7 +355,7 @@ function TrainSearchCard() {
               onClick={() => setIsDatePickerOpen(true)}
               className="w-full text-left pl-12 pr-4 py-4 bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-2xl text-base font-bold text-slate-900 dark:text-white hover:border-blue-500 transition-all cursor-pointer shadow-inner flex items-center justify-between"
             >
-              <span>{formatFormattedDate(formData.journeyDate)}</span>
+              <span>{formatLocalDateDisplay(formData.journeyDate)}</span>
               <span className="text-xs text-blue-600 dark:text-blue-400 font-extrabold uppercase bg-blue-50 dark:bg-blue-950/80 px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-800">
                 Change Date
               </span>
@@ -227,8 +372,8 @@ function TrainSearchCard() {
             </span>
             <div className="flex flex-wrap gap-2">
               {recentSearches.map((item, idx) => {
-                const codeFrom = getStationCode(item.from)
-                const codeTo = getStationCode(item.to)
+                const codeFrom = extractStationCode(item.from)
+                const codeTo = extractStationCode(item.to)
                 return (
                   <button
                     key={idx}
@@ -247,20 +392,25 @@ function TrainSearchCard() {
           </div>
         ) : null}
 
-        {/* Large Prominent Blue Gradient Search Button */}
+        {/* Search Button with Single Request Lifecycle Lock */}
         <div className="pt-2">
           <button
             type="submit"
-            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-base shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/35 hover:scale-[1.005] active:scale-[0.995] transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer"
+            disabled={isSubmitting}
+            className={`w-full py-4 px-6 rounded-2xl text-white font-black text-base transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer ${
+              isSubmitting
+                ? 'bg-slate-400 dark:bg-slate-700 cursor-not-allowed opacity-80'
+                : 'bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/35 hover:scale-[1.005] active:scale-[0.995]'
+            }`}
           >
-            <span>Search Trains</span>
-            <ArrowRight className="w-5 h-5" />
+            <span>{isSubmitting ? 'Searching Trains...' : 'Search Trains'}</span>
+            <ArrowRight className={`w-5 h-5 ${isSubmitting ? 'animate-pulse' : ''}`} />
           </button>
         </div>
 
       </form>
 
-      {/* Custom Date Picker Modal */}
+      {/* Date Picker Modal */}
       <DatePickerModal
         isOpen={isDatePickerOpen}
         onClose={() => setIsDatePickerOpen(false)}

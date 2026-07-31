@@ -27,10 +27,20 @@ export const getCurrentIndianTime = () => {
 }
 
 /**
- * Calculates dynamic AI Recommendations based on Current Indian Time,
- * departure timings, travel duration, running status, and departed state.
- *
- * Future-ready for live API integration (delays, platform status, live running info).
+ * Formats minute difference into human readable text (e.g. 18 -> "18 minutes", 120 -> "2 hours")
+ */
+function formatMinutesDifference(diffMins) {
+  if (diffMins <= 0) return 'shortly'
+  if (diffMins < 60) return `in ${diffMins} minutes`
+  const hrs = Math.floor(diffMins / 60)
+  const mins = diffMins % 60
+  if (mins === 0) return `in ${hrs} hour${hrs > 1 ? 's' : ''}`
+  return `in ${hrs}h ${mins}m`
+}
+
+/**
+ * Calculates dynamic time-aware AI Recommendations based on current time.
+ * Prioritizes next available departure, lowest waiting time, and fastest duration.
  */
 export const calculateAiRecommendations = (trains, selectedDate, dateMode = 'TODAY', overrideCurrentMins = null) => {
   if (!trains || trains.length === 0) return { recommendations: [], currentTimeFormatted: '' }
@@ -38,7 +48,6 @@ export const calculateAiRecommendations = (trains, selectedDate, dateMode = 'TOD
   const { totalMinutes: currentMins, formattedTime } = getCurrentIndianTime()
   const effectiveCurrentMins = overrideCurrentMins !== null ? overrideCurrentMins : currentMins
 
-  // Day of week calculation for selected date
   const selectedDayIndex = selectedDate
     ? new Date(selectedDate + 'T00:00:00').getDay()
     : new Date().getDay()
@@ -50,49 +59,65 @@ export const calculateAiRecommendations = (trains, selectedDate, dateMode = 'TOD
 
   if (eligible.length === 0) return { recommendations: [], currentTimeFormatted: formattedTime }
 
-  // If dateMode is TODAY, filter out trains that have already departed
+  // If searching for TODAY, filter out trains that departed already
   if (dateMode === 'TODAY') {
     const upcoming = eligible.filter((t) => {
       const depMins = timeToMinutes(t.departureTime)
       return depMins >= effectiveCurrentMins
     })
 
-    // If there are upcoming trains today, use upcoming trains; otherwise fallback to earliest services
     if (upcoming.length > 0) {
       eligible = upcoming
     }
   }
 
-  // Sort upcoming eligible trains chronologically by departure time
-  eligible.sort((a, b) => timeToMinutes(a.departureTime) - timeToMinutes(b.departureTime))
+  // Sort upcoming trains by departure time from current time (Priority 1 & 2)
+  eligible.sort((a, b) => {
+    const depA = timeToMinutes(a.departureTime)
+    const depB = timeToMinutes(b.departureTime)
+    const waitA = depA >= effectiveCurrentMins ? depA - effectiveCurrentMins : depA + 1440 - effectiveCurrentMins
+    const waitB = depB >= effectiveCurrentMins ? depB - effectiveCurrentMins : depB + 1440 - effectiveCurrentMins
+
+    // If wait times are within 15 mins of each other, prioritize faster duration (Priority 3)
+    if (Math.abs(waitA - waitB) <= 15) {
+      return a.durationMinutes - b.durationMinutes
+    }
+    return waitA - waitB
+  })
 
   const recommendations = []
 
   if (eligible.length > 0) {
     const topPick = eligible[0]
-    const reason = 'Leaves soon and provides one of the quickest journeys.'
+    const depMins = timeToMinutes(topPick.departureTime)
+    const waitMins = depMins >= effectiveCurrentMins ? depMins - effectiveCurrentMins : depMins + 1440 - effectiveCurrentMins
+    const waitStr = formatMinutesDifference(waitMins)
+    const toStationName = topPick.to ? topPick.to.split('(')[0].trim() : 'destination'
+
+    const reason = `Leaves ${waitStr} and reaches ${toStationName} in approximately ${topPick.duration || '2 hours'}.`
 
     recommendations.push({
       train: topPick,
       type: 'PRIMARY',
-      badgeText: '⭐ AI Recommended',
+      badgeText: '⭐ AI Recommendation',
       reason: reason,
     })
   }
 
   if (eligible.length > 1) {
     const remaining = eligible.slice(1)
-    // Find the train with the shortest journey duration among remaining upcoming trains
-    const fastestAlt = remaining.reduce((fastest, curr) => {
-      return curr.durationMinutes < fastest.durationMinutes ? curr : fastest
-    }, remaining[0])
+    const altPick = remaining[0]
+    const depMins = timeToMinutes(altPick.departureTime)
+    const waitMins = depMins >= effectiveCurrentMins ? depMins - effectiveCurrentMins : depMins + 1440 - effectiveCurrentMins
+    const waitStr = formatMinutesDifference(waitMins)
+    const toStationName = altPick.to ? altPick.to.split('(')[0].trim() : 'destination'
 
-    const altReason = 'Fastest journey after the recommended option.'
+    const altReason = `Leaves ${waitStr} and reaches ${toStationName} in approximately ${altPick.duration || '2 hours'}.`
 
     recommendations.push({
-      train: fastestAlt,
+      train: altPick,
       type: 'ALTERNATIVE',
-      badgeText: '⭐ Alternative',
+      badgeText: '⭐ Alternative Pick',
       reason: altReason,
     })
   }

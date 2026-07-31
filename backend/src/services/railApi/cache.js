@@ -58,13 +58,6 @@ class RequestCacheManager {
   /**
    * Wraps an async fetch call with in-memory TTL caching and request deduplication.
    * If a identical request is currently in-flight, returns the shared pending promise.
-   *
-   * @template T
-   * @param {string} cacheKey
-   * @param {number} ttlMs
-   * @param {() => Promise<T>} fetchFn
-   * @param {boolean} [bypassCache=false]
-   * @returns {Promise<T>}
    */
   async executeWithCache(cacheKey, ttlMs, fetchFn, bypassCache = false) {
     // 1. Check existing cached data unless bypassed
@@ -84,7 +77,7 @@ class RequestCacheManager {
     const requestPromise = (async () => {
       try {
         const result = await fetchFn()
-        if (result && result.success && ttlMs > 0) {
+        if (result && (result.success || result.httpStatus === 200) && ttlMs > 0) {
           this.set(cacheKey, result, ttlMs)
         }
         return result
@@ -98,4 +91,9 @@ class RequestCacheManager {
   }
 }
 
-export const railCache = new RequestCacheManager()
+const railCache = new RequestCacheManager()
+
+module.exports = {
+  RequestCacheManager,
+  railCache,
+}

@@ -5,6 +5,7 @@ const cookieParser = require('cookie-parser');
 const { clientOrigin } = require('./config/env');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
+const trainRoutes = require('./routes/trainRoutes');
 const journeyRoutes = require('./routes/journeyRoutes');
 const alertRoutes = require('./routes/alertRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
@@ -25,6 +26,7 @@ app.use(cookieParser());
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/trains', trainRoutes);
 app.use('/api/journeys', journeyRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/notifications', notificationRoutes);

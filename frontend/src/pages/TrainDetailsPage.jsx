@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { AlertTriangle, Train, Trash2 } from 'lucide-react'
-import { mockTrains } from '../data/trainsData'
 import { useJourney } from '../context/JourneyContext'
+import { getTrainDetails, getLiveTrainStatus } from '../services/trainService'
+import { buildLiveJourneyState } from '../services/journeyTrackingEngine'
 
 // Modular Components
 import TrainSummaryCard from '../components/details/TrainSummaryCard'
@@ -15,23 +16,86 @@ function TrainDetailsPage() {
   const navigate = useNavigate()
   const { activeJourney, cancelJourney, refreshJourney } = useJourney()
 
-  const train = mockTrains.find((t) => t.trainNo === trainNo) || mockTrains[0]
+  const [liveData, setLiveData] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Active Journey check (Mode 1: Planning Mode vs Mode 2: Active Journey Mode)
-  const isThisTrainConfirmed = activeJourney?.trainNo === train.trainNo
+  // Active Journey check
+  const isThisTrainConfirmed = activeJourney?.trainNo === String(trainNo)
+
+  // Load real RailRadar train details and live status
+  useEffect(() => {
+    let isMounted = true
+    setIsLoading(true)
+
+    async function loadTrainData() {
+      try {
+        const [detailsRes, liveRes] = await Promise.all([
+          getTrainDetails(trainNo),
+          getLiveTrainStatus(trainNo),
+        ])
+
+        if (!isMounted) return
+
+        const unifiedState = buildLiveJourneyState(liveRes || detailsRes, {
+          trainNo,
+          journeyStatus: isThisTrainConfirmed ? 'Active' : 'Planned',
+        })
+
+        setLiveData(unifiedState)
+      } catch (err) {
+        console.warn('[TrainDetailsPage] Failed to fetch live status:', err.message)
+      } finally {
+        if (isMounted) setIsLoading(false)
+      }
+    }
+
+    loadTrainData()
+
+    return () => {
+      isMounted = false
+    }
+  }, [trainNo, isThisTrainConfirmed])
+
+  // Use activeJourney if confirmed, else fallback to loaded liveData
+  const currentTrainState = isThisTrainConfirmed && activeJourney ? activeJourney : liveData
+
+  // Fallback train object structure if API loading
+  const trainObj = currentTrainState || {
+    id: String(trainNo),
+    trainNo: String(trainNo),
+    trainName: 'Loading Train...',
+    category: 'Superfast',
+    from: 'MYS',
+    to: 'SBC',
+    departureTime: '07:40 PM',
+    arrivalTime: '09:55 PM',
+    duration: '2h 15m',
+    distance: '138 km',
+    runningStatus: 'Running On Time',
+    currentStation: { code: 'MYS', name: 'MYSORE JN', status: 'at-station' },
+    nextStation: { code: 'SBC', name: 'KSR BENGALURU', distance: '12 km' },
+    stops: [],
+  }
 
   // Live Refresh state
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const handleRefreshStatus = async () => {
     setIsRefreshing(true)
-    await refreshJourney()
+    if (isThisTrainConfirmed) {
+      await refreshJourney()
+    } else {
+      const liveRes = await getLiveTrainStatus(trainNo)
+      if (liveRes) {
+        setLiveData(buildLiveJourneyState(liveRes, { trainNo }))
+      }
+    }
     setTimeout(() => {
       setIsRefreshing(false)
     }, 600)
   }
 
-  // Floating Footer Scroll Visibility State (appears ONLY while Train Route section is active in viewport, hides at END marker)
+  // Floating Footer Scroll Visibility State
   const [showStickyFooter, setShowStickyFooter] = useState(false)
 
   useEffect(() => {
@@ -39,7 +103,6 @@ function TrainDetailsPage() {
       const routeElement = document.getElementById('train-route-section')
       if (routeElement) {
         const rect = routeElement.getBoundingClientRect()
-        // Footer is visible ONLY while user is scrolling inside the Train Route section
         const isInRouteView = rect.top <= window.innerHeight - 100 && rect.bottom > window.innerHeight + 20
         setShowStickyFooter(isInRouteView)
       } else {
@@ -70,10 +133,10 @@ function TrainDetailsPage() {
 
   // Mode 1 Action: "Confirm Journey" click
   const handleConfirmJourney = () => {
-    if (activeJourney && activeJourney.trainNo !== train.trainNo) {
+    if (activeJourney && activeJourney.trainNo !== String(trainNo)) {
       setIsConflictModalOpen(true)
     } else {
-      navigate(`/alert-preferences/${train.trainNo}`)
+      navigate(`/alert-preferences/${trainNo}`)
     }
   }
 
@@ -102,7 +165,7 @@ function TrainDetailsPage() {
       
       {/* 1. TOP SUMMARY CARD */}
       <TrainSummaryCard
-        train={train}
+        train={trainObj}
         onConfirmClick={handleConfirmJourney}
         onCancelClick={handleOpenCancelDialog}
         isJourneyConfirmed={isThisTrainConfirmed}
@@ -110,18 +173,18 @@ function TrainDetailsPage() {
 
       {/* 2. JOURNEY PROGRESS (Displayed ONLY in Mode 2) */}
       {isThisTrainConfirmed && (
-        <JourneyTimelineProgress train={train} />
+        <JourneyTimelineProgress train={trainObj} />
       )}
 
       {/* 3. TRAIN ROUTE */}
       <ImportantStopsCard
         ref={currentTrainRef}
-        train={train}
+        train={trainObj}
       />
 
       {/* 4. STICKY FOOTER */}
       <StickyBottomStatus
-        train={train}
+        train={trainObj}
         onRefreshClick={handleRefreshStatus}
         isRefreshing={isRefreshing}
         onConfirmClick={handleConfirmJourney}

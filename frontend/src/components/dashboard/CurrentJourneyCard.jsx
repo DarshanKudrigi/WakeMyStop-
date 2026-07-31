@@ -36,7 +36,7 @@ function CurrentJourneyCard({ journey }) {
             : 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800'
         }`}>
           {isDelayed ? <ShieldAlert className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-          <span>{active.status || 'Running On Time'}</span>
+          <span>{active.runningStatus || active.status || 'Running On Time'}</span>
         </span>
       </div>
 
@@ -57,12 +57,12 @@ function CurrentJourneyCard({ journey }) {
           <div className="flex items-center gap-4 text-xs font-bold text-slate-600 dark:text-slate-400 flex-wrap">
             <div className="flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-              <span>{active.date || 'Today, 28 Jul 2026'}</span>
+              <span>{active.date || 'Today'}</span>
             </div>
 
             <div className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-              <span>Expected Time of Arrival: <strong className="text-slate-900 dark:text-white font-bold">09:12 PM</strong></span>
+              <span>Expected Time of Arrival: <strong className="text-slate-900 dark:text-white font-bold">{active.expectedArrival || '09:12 PM'}</strong></span>
             </div>
           </div>
         </div>

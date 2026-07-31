@@ -3,11 +3,11 @@ import { Navigation, Clock, Activity } from 'lucide-react'
 function JourneyTimelineProgress({ train }) {
   if (!train) return null
 
-  // Journey metrics
-  const percentComplete = 68
-  const currentStation = 'Mandya'
-  const nextStation = 'Ramanagara'
-  const expectedTime = '09:12 PM'
+  // Live journey metrics derived from single-source-of-truth train object
+  const percentComplete = typeof train.journeyPercentage === 'number' ? train.journeyPercentage : 68
+  const currentStation = train.currentStation?.name || train.currentStation?.code || 'In Transit'
+  const nextStation = train.nextStation?.name || train.nextStation?.code || 'Next Station'
+  const expectedTime = train.expectedArrival || train.nextStation?.arrivalTime || '09:12 PM'
 
   return (
     <div className="w-full bg-white/95 dark:bg-[#161c26]/95 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-4 sm:p-5 shadow-sm space-y-3">

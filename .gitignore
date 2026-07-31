@@ -18,6 +18,7 @@ build/
 frontend/dist/
 backend/dist/
 docs
+.DS_Store
 
 # Logs & Temporary Scratch Scripts
 logs/

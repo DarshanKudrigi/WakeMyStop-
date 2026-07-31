@@ -1,11 +1,11 @@
-import { RAIL_API_CONFIG } from './constants.js'
-import { parseApiError, NetworkError, TimeoutError, UnauthorizedError } from './errors.js'
-import { railCache } from './cache.js'
+const { RAIL_API_CONFIG } = require('./constants.js')
+const { parseApiError, NetworkError, TimeoutError, UnauthorizedError } = require('./errors.js')
+const { railCache } = require('./cache.js')
 
 /**
  * Low-level shared HTTP client for RailRadar REST API
  */
-export async function rawRailFetch(endpoint, queryParams = {}, options = {}) {
+async function rawRailFetch(endpoint, queryParams = {}, options = {}) {
   const {
     method = 'GET',
     headers = {},
@@ -15,6 +15,7 @@ export async function rawRailFetch(endpoint, queryParams = {}, options = {}) {
   } = options
 
   if (!apiKey) {
+    console.error('❌ [RailRadar UPSTREAM] MISSING API KEY! Check backend/.env for RailRadar_api_key')
     throw new UnauthorizedError(
       'RailRadar API Key is missing. Ensure RailRadar_api_key or RAIL_API_KEY is configured in .env'
     )
@@ -27,6 +28,20 @@ export async function rawRailFetch(endpoint, queryParams = {}, options = {}) {
     if (val !== undefined && val !== null && val !== '') {
       url.searchParams.append(key, String(val))
     }
+  })
+
+  const maskedKey = apiKey ? `${apiKey.slice(0, 8)}...` : 'MISSING'
+  console.log(`📡 [RailRadar UPSTREAM REQUEST]`, {
+    timestamp: new Date().toISOString(),
+    method,
+    url: url.toString(),
+    apiKeyPresent: Boolean(apiKey),
+    maskedApiKey: maskedKey,
+    headers: {
+      Authorization: `Bearer ${maskedKey}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
   })
 
   // Timeout control
@@ -57,19 +72,35 @@ export async function rawRailFetch(endpoint, queryParams = {}, options = {}) {
       jsonBody = null
     }
 
+    console.log(`📥 [RailRadar UPSTREAM RESPONSE]`, {
+      url: url.toString(),
+      status: response.status,
+      statusText: response.statusText,
+      successFlag: jsonBody?.success || jsonBody?.response?.success || false,
+      sampleResponse: JSON.stringify(jsonBody).slice(0, 200),
+    })
+
     // Handle non-2xx HTTP status codes
     if (!response.ok) {
       throw parseApiError(response.status, jsonBody)
     }
 
-    // Explicitly check standard response envelope success flag
-    if (!jsonBody || jsonBody.success !== true) {
+    // Explicitly check standard response envelope success flag (handles both top-level and nested response envelope)
+    const isSuccess = jsonBody && (jsonBody.success === true || jsonBody.response?.success === true || jsonBody.httpStatus === 200)
+    if (!jsonBody || !isSuccess) {
       throw parseApiError(response.status || 400, jsonBody)
+    }
+
+    // Return inner envelope if wrapped under jsonBody.response
+    if (jsonBody.response && typeof jsonBody.response === 'object') {
+      return jsonBody.response
     }
 
     return jsonBody
   } catch (error) {
     clearTimeout(timeoutId)
+
+    console.error(`💥 [RailRadar UPSTREAM ERROR] ${endpoint}:`, error.message)
 
     if (error.name === 'AbortError') {
       throw new TimeoutError(`Request to ${endpoint} timed out after ${timeoutMs}ms`)
@@ -86,7 +117,7 @@ export async function rawRailFetch(endpoint, queryParams = {}, options = {}) {
 /**
  * Public wrapper client executing request with caching & deduplication
  */
-export async function executeRailRequest(endpoint, queryParams = {}, options = {}) {
+async function executeRailRequest(endpoint, queryParams = {}, options = {}) {
   const { ttlMs = 0, bypassCache = false, ...fetchOptions } = options
   const cacheKey = railCache.createKey(endpoint, queryParams)
 
@@ -102,4 +133,7 @@ export async function executeRailRequest(endpoint, queryParams = {}, options = {
   return rawRailFetch(endpoint, queryParams, fetchOptions)
 }
 
-export default executeRailRequest
+module.exports = {
+  rawRailFetch,
+  executeRailRequest,
+}

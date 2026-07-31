@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle, Info } from 'lucide-react'
+import { CheckCircle, Info, Sparkles } from 'lucide-react'
 
 // Single letter days matching 'Where Is My Train' (S M T W T F S)
 const weekLetters = [
@@ -44,6 +44,7 @@ function TrainCard({
   selectedDate,
   dateMode = 'TODAY',
   isRecommendedCard = false,
+  recommendationReason = null,
   onConfirmClick,
 }) {
   const navigate = useNavigate()
@@ -120,6 +121,14 @@ function TrainCard({
         </div>
       </div>
 
+      {/* AI Recommendation Reason Banner */}
+      {isRecommendedCard && recommendationReason && (
+        <div className="flex items-start gap-1.5 px-3 py-2 rounded-xl bg-blue-50/80 dark:bg-blue-950/50 border border-blue-200/70 dark:border-blue-800/60 text-blue-700 dark:text-blue-300 text-xs font-bold">
+          <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+          <span>{recommendationReason}</span>
+        </div>
+      )}
+
       {/* SECOND ROW: Departure Time — Journey Duration — Arrival Time Strip */}
       <div className="flex items-center justify-between text-sm sm:text-base font-black text-slate-900 dark:text-white py-1.5 border-y border-slate-100 dark:border-slate-800/60">
         <div className="flex items-center gap-2">
@@ -140,7 +149,7 @@ function TrainCard({
       {/* THIRD ROW: Operational Status (LEFT) & Running Days (RIGHT) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
         
-        {/* LEFT: Operational Status Badge (Slightly Reduced Height/Padding for Compactness) */}
+        {/* LEFT: Operational Status Badge */}
         <div>
           {!runsOnSelectedDate ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[11px] font-extrabold bg-slate-100 dark:bg-slate-800/90 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700/70 leading-tight">
@@ -157,22 +166,20 @@ function TrainCard({
               </span>
             )
           ) : (
-            /* FUTURE or PAST Mode: Display Scheduled Departure only */
+            /* FUTURE or PAST Mode */
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80 leading-tight">
               <span>Scheduled Departure: {train.departureTime}</span>
             </span>
           )}
         </div>
 
-        {/* RIGHT: Running Days Information (Subtle Neutral Badge vs Weekdays) */}
+        {/* RIGHT: Running Days Information */}
         <div>
           {train.runsDaily ? (
-            /* Subtle Neutral Badge for Runs Daily */
             <span className="inline-block px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80 font-bold text-xs">
               Runs Daily
             </span>
           ) : (
-            /* Weekday Indicators Only */
             <div className="flex items-center gap-1.5 text-xs">
               {weekLetters.map((item, idx) => {
                 const isRunningOnDay = train.runningDays?.includes(item.name)
@@ -196,10 +203,10 @@ function TrainCard({
 
       </div>
 
-      {/* FOURTH ROW: Action Button (Confirm Journey - Full Width on Mobile, Auto on Desktop) */}
+      {/* FOURTH ROW: Action Button */}
       <div className="pt-2 border-t border-slate-100 dark:border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         
-        {/* Notice alert when Confirm Journey is disabled */}
+        {/* Notice alert */}
         {hasActiveJourney ? (
           <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
             <Info className="w-3.5 h-3.5 shrink-0" />
@@ -212,7 +219,7 @@ function TrainCard({
           </span>
         ) : <div className="hidden sm:block" />}
 
-        {/* Action Button: Confirm Journey (Spans Full Width on Mobile, Comfortable Touch Area) */}
+        {/* Action Button */}
         <div className="w-full sm:w-auto shrink-0 sm:ml-auto">
           <button
             type="button"

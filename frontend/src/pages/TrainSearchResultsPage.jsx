@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { mockTrains } from '../data/trainsData'
 import TrainCard from '../components/journey/TrainCard'
-import { ArrowRight, SlidersHorizontal, Train, Calendar } from 'lucide-react'
+import { ArrowRight, SlidersHorizontal, Train, Calendar, Info } from 'lucide-react'
 import { calculateAiRecommendations, timeToMinutes } from '../utils/aiRecommendationEngine'
+import { searchTrains } from '../services/trainService'
+import { getLocalTodayDateStr, formatLocalDateDisplay } from '../utils/dateUtils'
 
 const filterCategories = [
   'All',
@@ -27,22 +28,41 @@ function TrainSearchResultsPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
-  const fromStation = searchParams.get('from') || 'Bengaluru Cantt (BNC)'
-  const toStation = searchParams.get('to') || 'Mysuru Junction (MYS)'
+  const fromStation = searchParams.get('from') || 'KSR BENGALURU (SBC)'
+  const toStation = searchParams.get('to') || 'MYSURU JN (MYS)'
   
-  // Today's date string YYYY-MM-DD
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], [])
+  // Today's date string YYYY-MM-DD (Timezone Aware)
+  const todayStr = useMemo(() => getLocalTodayDateStr(), [])
   const initialDate = searchParams.get('date') || todayStr
 
   const [selectedDate, setSelectedDate] = useState(initialDate)
   const [activeFilter, setActiveFilter] = useState('All')
   const [sortBy, setSortBy] = useState('departure')
 
-  // Loading state for smooth transitions
-  const [isLoading, setIsLoading] = useState(false)
+  // Live Train Results State
+  const [rawTrains, setRawTrains] = useState([])
+  const [isMockFallback, setIsMockFallback] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
   // Throttled scroll listener state for showing the constant-height compact toolbar
   const [showCompactBar, setShowCompactBar] = useState(false)
+
+  // Execute Live RailRadar API Search with 5-minute Caching & Mock Fallback
+  useEffect(() => {
+    let isMounted = true
+    setIsLoading(true)
+
+    searchTrains(fromStation, toStation, selectedDate).then((result) => {
+      if (!isMounted) return
+      setRawTrains(result.trains || [])
+      setIsMockFallback(Boolean(result.isMockFallback))
+      setIsLoading(false)
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [fromStation, toStation, selectedDate])
 
   useEffect(() => {
     let ticking = false
@@ -63,20 +83,14 @@ function TrainSearchResultsPage() {
   // Handlers for filter and date changes with quick smooth loading state
   const handleDateChange = (newDate) => {
     setSelectedDate(newDate)
-    setIsLoading(true)
-    setTimeout(() => setIsLoading(false), 200)
   }
 
   const handleFilterChange = (cat) => {
     setActiveFilter(cat)
-    setIsLoading(true)
-    setTimeout(() => setIsLoading(false), 200)
   }
 
   const handleSortChange = (newSort) => {
     setSortBy(newSort)
-    setIsLoading(true)
-    setTimeout(() => setIsLoading(false), 200)
   }
 
   // Compute date mode: 'TODAY', 'FUTURE', or 'PAST'
@@ -88,38 +102,25 @@ function TrainSearchResultsPage() {
 
   // Calculate dynamic AI Recommendations (Max 2 Trains)
   const { recommendations: aiRecommendations } = useMemo(() => {
-    return calculateAiRecommendations(mockTrains, selectedDate, dateMode)
-  }, [selectedDate, dateMode])
+    return calculateAiRecommendations(rawTrains, selectedDate, dateMode)
+  }, [rawTrains, selectedDate, dateMode])
 
   // Calculate dynamic category counts
   const categoryCounts = useMemo(() => {
-    const counts = { All: mockTrains.length }
+    const counts = { All: rawTrains.length }
     filterCategories.forEach((cat) => {
       if (cat !== 'All') {
-        counts[cat] = mockTrains.filter(
+        counts[cat] = rawTrains.filter(
           (t) => t.category.toLowerCase() === cat.toLowerCase()
         ).length
       }
     })
     return counts
-  }, [])
-
-  // Format date display
-  const formatDateDisplay = (dateStr) => {
-    if (!dateStr) return ''
-    const d = new Date(dateStr + 'T00:00:00')
-    if (isNaN(d.getTime())) return dateStr
-    return d.toLocaleDateString('en-US', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    })
-  }
+  }, [rawTrains])
 
   // Filter and sort trains dynamically
   const filteredAndSortedTrains = useMemo(() => {
-    let result = [...mockTrains]
+    let result = [...rawTrains]
 
     if (activeFilter !== 'All') {
       result = result.filter(
@@ -138,7 +139,7 @@ function TrainSearchResultsPage() {
     })
 
     return result
-  }, [activeFilter, sortBy])
+  }, [rawTrains, activeFilter, sortBy])
 
   // Enforce flow: Clicking a train card navigates to Train Details page
   const handleSelectTrain = (train) => {
@@ -146,9 +147,17 @@ function TrainSearchResultsPage() {
   }
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-6 pb-12 pt-2">
+    <div className="w-full max-w-6xl mx-auto space-y-5 pb-10 pt-0">
       
-      {/* 1. COMPACT STICKY TOOLBAR (Constant 56px height, zero layout shifts, opacity & transform animation ONLY) */}
+      {/* Mock Fallback Notice Banner */}
+      {isMockFallback && !isLoading && (
+        <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 text-xs font-bold flex items-center gap-2 shadow-xs">
+          <Info className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span>Live railway information is temporarily unavailable. Showing sample data.</span>
+        </div>
+      )}
+
+      {/* 1. COMPACT STICKY TOOLBAR */}
       <div
         className={`sticky top-2 z-30 h-14 -mx-2 px-2 transition-all duration-200 ease-in-out ${
           showCompactBar
@@ -197,7 +206,7 @@ function TrainSearchResultsPage() {
         </div>
       </div>
 
-      {/* 2. MAIN HEADER (In Normal Document Flow - Scrolls away naturally without layout thrashing) */}
+      {/* 2. MAIN HEADER */}
       <div className="w-full bg-white dark:bg-[#161c26] rounded-3xl border border-slate-200/90 dark:border-slate-800/90 p-5 sm:p-6 shadow-md shadow-blue-500/5 space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           
@@ -209,7 +218,7 @@ function TrainSearchResultsPage() {
               <span>{toStation.split('(')[0].trim()}</span>
             </div>
             <p className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 flex items-center gap-2">
-              <span>📅 {formatDateDisplay(selectedDate)}</span>
+              <span>📅 {formatLocalDateDisplay(selectedDate)}</span>
               {dateMode === 'FUTURE' && (
                 <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
                   Future Date
@@ -293,10 +302,10 @@ function TrainSearchResultsPage() {
             <span className="text-xl">🤖</span>
             <div>
               <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                AI Smart Recommendations
+                AI Recommendation
               </h2>
               <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                Based on your current time, these are the best train options.
+                Based on your current time, these are the best train options starting next.
               </p>
             </div>
           </div>
@@ -309,6 +318,7 @@ function TrainSearchResultsPage() {
                 selectedDate={selectedDate}
                 dateMode={dateMode}
                 isRecommendedCard={true}
+                recommendationReason={rec.reason}
                 onConfirmClick={(t) => handleSelectTrain(t)}
               />
             ))}

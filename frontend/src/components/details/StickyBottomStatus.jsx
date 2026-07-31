@@ -10,30 +10,10 @@ function StickyBottomStatus({
   visible,
   isJourneyConfirmed,
 }) {
-  // Live seconds elapsed since last update
-  const [secondsAgo, setSecondsAgo] = useState(3)
-
   // Manual refresh countdown cooldown (15 seconds lockout)
   const [cooldown, setCooldown] = useState(0)
 
-  // 1. Auto-increment seconds counter every second
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setSecondsAgo((prev) => prev + 1)
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [])
-
-  // 2. Auto-refresh every 15 seconds
-  useEffect(() => {
-    const autoRefreshTimer = setInterval(() => {
-      setSecondsAgo(0)
-      if (onRefreshClick) onRefreshClick()
-    }, 15000)
-    return () => clearInterval(autoRefreshTimer)
-  }, [onRefreshClick])
-
-  // 3. Cooldown countdown timer when manual refresh is clicked
+  // Cooldown countdown timer when manual refresh is clicked
   useEffect(() => {
     if (cooldown <= 0) return
     const cdTimer = setInterval(() => {
@@ -44,15 +24,14 @@ function StickyBottomStatus({
 
   const handleManualRefresh = () => {
     if (cooldown > 0 || isRefreshing) return
-    setSecondsAgo(0)
     setCooldown(15) // Lock out manual refresh for 15s
     if (onRefreshClick) onRefreshClick()
   }
 
   if (!train) return null
 
-  const progressPercent = 68
-  const remainingDistance = '46 km'
+  const progressPercent = typeof train.journeyPercentage === 'number' ? train.journeyPercentage : 68
+  const remainingDistance = train.distanceRemaining !== undefined ? `${train.distanceRemaining} km` : '46 km'
 
   return (
     <div
@@ -106,10 +85,10 @@ function StickyBottomStatus({
 
               </div>
 
-              {/* Row 2: Bottom Actions & Live Timestamp */}
+              {/* Row 2: Bottom Actions & Static Timestamp Label */}
               <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800/80">
                 
-                {/* LEFT: Refresh Icon + Live "Updated X seconds ago" / 15s Countdown */}
+                {/* LEFT: Refresh Icon + Static "Updated a few seconds ago" / Cooldown */}
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -126,7 +105,7 @@ function StickyBottomStatus({
                   </button>
 
                   <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                    {cooldown > 0 ? `Wait ${cooldown}s` : `Updated ${secondsAgo}s ago`}
+                    {cooldown > 0 ? `Wait ${cooldown}s` : 'Updated a few seconds ago'}
                   </span>
                 </div>
 
@@ -148,18 +127,18 @@ function StickyBottomStatus({
               <div className="space-y-0.5 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white truncate">
-                    {train.isDelayed ? 'Arrived at MANDYA' : 'Left MYSURU JN at 07:40 PM'}
+                    {train.runningStatus || (train.isDelayed ? `Delayed by ${train.delayMinutes} mins` : `Left ${train.fromName || train.from} at ${train.departureTime}`)}
                   </span>
                   <span className={`px-2 py-0.5 rounded-full text-[11px] font-black border ${
-                    train.isDelayed
+                    train.delayMinutes > 0
                       ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-400 border-rose-300 dark:border-rose-800'
                       : 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800'
                   }`}>
-                    {train.isDelayed ? `${train.delayMinutes || 8} min delay` : 'On Time'}
+                    {train.delayMinutes > 0 ? `${train.delayMinutes} min delay` : 'On Time'}
                   </span>
                 </div>
                 <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                  {cooldown > 0 ? `Wait ${cooldown}s` : `Updated ${secondsAgo}s ago`}
+                  {cooldown > 0 ? `Wait ${cooldown}s` : 'Updated a few seconds ago'}
                 </p>
               </div>
 

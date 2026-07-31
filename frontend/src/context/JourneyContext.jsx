@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { getActiveJourney, saveActiveJourney, cancelActiveJourney } from '../utils/activeJourney'
-import { calculateJourneyProgress } from '../services/journeyEngine'
+import { buildLiveJourneyState } from '../services/journeyTrackingEngine'
 import { autoRefreshService } from '../services/autoRefreshService'
 import { notificationService } from '../services/notificationService'
 
@@ -10,30 +10,32 @@ export function JourneyProvider({ children }) {
   // Reactive Global Active Journey State
   const [activeJourney, setActiveJourney] = useState(() => getActiveJourney())
 
-  // Restore journey state on mount & synchronize with auto-refresh service
+  const trainNo = activeJourney?.trainNo
+
+  // Synchronize autoRefreshService ONLY when active trainNo changes
   useEffect(() => {
-    if (activeJourney && activeJourney.trainNo) {
-      autoRefreshService.start(activeJourney.trainNo)
+    if (trainNo && activeJourney?.journeyStatus === 'Active') {
+      autoRefreshService.start(trainNo)
     } else {
       autoRefreshService.stop()
     }
-  }, [activeJourney])
+    return () => {
+      autoRefreshService.stop()
+    }
+  }, [trainNo, activeJourney?.journeyStatus])
 
-  // Subscribe to autoRefreshService updates
+  // Subscribe to autoRefreshService updates with single-source-of-truth normalization engine
   useEffect(() => {
-    const unsubscribe = autoRefreshService.subscribe((updatedStatus) => {
+    const unsubscribe = autoRefreshService.subscribe((rawLivePayload) => {
+      if (!rawLivePayload) return
       setActiveJourney((prev) => {
         if (!prev) return null
-        const progress = calculateJourneyProgress(null, updatedStatus.currentStation)
-        const updated = {
-          ...prev,
-          status: updatedStatus.status || prev.status,
-          delayMinutes: updatedStatus.delayMinutes ?? prev.delayMinutes,
-          lastRefreshedAt: new Date().toISOString(),
-          progress,
-        }
-        saveActiveJourney(updated)
-        return updated
+
+        const updatedState = buildLiveJourneyState(rawLivePayload, prev)
+        if (!updatedState) return prev
+
+        saveActiveJourney(updatedState)
+        return updatedState
       })
     })
 
@@ -42,36 +44,29 @@ export function JourneyProvider({ children }) {
 
   /**
    * Starts & activates a new journey with user's selected alert preferences.
-   * Enforces single-journey constraint.
    */
   const startJourney = useCallback((journeyPayload) => {
-    const progress = calculateJourneyProgress(journeyPayload)
-    const newJourney = {
-      id: `jrn_${Date.now()}`,
-      trainNo: journeyPayload.trainNo,
-      trainName: journeyPayload.trainName,
-      from: journeyPayload.from,
-      to: journeyPayload.to,
-      date: journeyPayload.date || 'Today, 28 Jul 2026',
-      alertPreferences: journeyPayload.alertPreferences || {},
-      status: 'Active',
-      activatedAt: new Date().toISOString(),
-      progress,
-    }
-
-    saveActiveJourney(newJourney)
-    setActiveJourney(newJourney)
-    autoRefreshService.start(newJourney.trainNo)
-
-    // Trigger activation alert event
-    notificationService.triggerAlert({
-      type: 'JOURNEY_STARTED',
-      message: `RailAlert AI started monitoring ${newJourney.trainName} (${newJourney.trainNo})`,
-      trainNo: newJourney.trainNo,
-      preferences: newJourney.alertPreferences,
+    const initialLiveState = buildLiveJourneyState(null, {
+      ...journeyPayload,
+      journeyStatus: 'Active',
+      journeyId: `jrn_${Date.now()}`,
     })
 
-    return newJourney
+    saveActiveJourney(initialLiveState)
+    setActiveJourney(initialLiveState)
+
+    // Trigger activation alert event ONCE
+    notificationService.triggerAlert({
+      type: 'JOURNEY_STARTED',
+      message: `RailAlert AI started monitoring ${initialLiveState.trainName} (${initialLiveState.trainNo})`,
+      trainNo: initialLiveState.trainNo,
+      preferences: journeyPayload.alertPreferences || {},
+    })
+
+    // Immediately trigger poll to fetch live data
+    autoRefreshService.start(initialLiveState.trainNo)
+
+    return initialLiveState
   }, [])
 
   /**
@@ -93,19 +88,23 @@ export function JourneyProvider({ children }) {
   }, [])
 
   /**
-   * Manual refresh trigger
+   * Manual refresh trigger (Resets background 15s timer)
    */
   const refreshJourney = useCallback(async () => {
     if (!activeJourney) return null
-    await autoRefreshService.poll()
-    const updated = getActiveJourney()
-    setActiveJourney(updated)
-    return updated
+    const rawData = await autoRefreshService.manualRefresh()
+    if (rawData) {
+      const updatedState = buildLiveJourneyState(rawData, activeJourney)
+      saveActiveJourney(updatedState)
+      setActiveJourney(updatedState)
+      return updatedState
+    }
+    return activeJourney
   }, [activeJourney])
 
   const value = {
     activeJourney,
-    hasActiveJourney: Boolean(activeJourney),
+    hasActiveJourney: Boolean(activeJourney && activeJourney.journeyStatus === 'Active'),
     startJourney,
     cancelJourney,
     completeJourney,

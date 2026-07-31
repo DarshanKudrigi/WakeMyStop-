@@ -3,9 +3,11 @@
  * Standard Reference: RailRadar Developer API Reference Guide v1.0
  */
 
-export const RAIL_API_CONFIG = {
+const RAIL_API_CONFIG = {
   BASE_URL: process.env.RAIL_API_BASE_URL || 'https://api.railradar.in/v1',
-  API_KEY: process.env.RailRadar_api_key || process.env.RAIL_API_KEY || '',
+  get API_KEY() {
+    return process.env.RailRadar_api_key || process.env.RAILRADAR_API_KEY || process.env.RAIL_API_KEY || ''
+  },
   DEFAULT_TIMEOUT_MS: 10000,
   
   // Rate Limit Safeguards (Free Tier: 100 req/min, 50 daily credit limit)
@@ -23,7 +25,7 @@ export const RAIL_API_CONFIG = {
   },
 }
 
-export const ENDPOINTS = {
+const ENDPOINTS = {
   // Trains Module
   TRAIN_DETAILS: (number) => `/trains/${number}`,
   LIVE_TRAIN_STATUS: (number) => `/trains/${number}/live`,
@@ -44,4 +46,9 @@ export const ENDPOINTS = {
   LEGACY_TRAINS_BETWEEN: '/legacy/trains/between',
   LEGACY_SHIPPING_FIND_TRAINS: '/legacy/modules/shipping/find-trains',
   LEGACY_TRAIN_DETAILS: (number) => `/legacy/trains/${number}`,
+}
+
+module.exports = {
+  RAIL_API_CONFIG,
+  ENDPOINTS,
 }

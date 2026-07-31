@@ -1,15 +1,39 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Play, Pause, CheckCircle2, Info, Check } from 'lucide-react'
-import { mockTrains } from '../data/trainsData'
 import { useJourney } from '../context/JourneyContext'
+import { getTrainDetails } from '../services/trainService'
+import { buildLiveJourneyState } from '../services/journeyTrackingEngine'
 
 function AlertPreferencesPage() {
   const { trainNo } = useParams()
   const navigate = useNavigate()
   const { startJourney } = useJourney()
 
-  const train = mockTrains.find((t) => t.trainNo === trainNo) || mockTrains[0]
+  const [liveTrain, setLiveTrain] = useState(null)
+
+  useEffect(() => {
+    let isMounted = true
+    getTrainDetails(trainNo).then((res) => {
+      if (!isMounted || !res) return
+      const liveState = buildLiveJourneyState(res, { trainNo })
+      setLiveTrain(liveState)
+    })
+    return () => {
+      isMounted = false
+    }
+  }, [trainNo])
+
+  const train = liveTrain || {
+    trainNo: String(trainNo),
+    trainName: 'Express Train',
+    from: 'Origin Station',
+    to: 'Destination Station',
+    totalDistance: '138 km',
+    departureTime: '07:40 PM',
+    status: 'Running On Time',
+    delayMinutes: 0,
+  }
 
   // Essential ON/OFF Toggle States
   const [preferences, setPreferences] = useState({
@@ -51,8 +75,8 @@ function AlertPreferencesPage() {
       to: train.to,
       departureTime: train.departureTime,
       totalDistance: train.totalDistance || '138 km',
-      date: 'Today, 28 Jul 2026',
-      status: train.isDelayed ? `Delayed by ${train.delayMinutes || 8} Minutes` : 'Running On Time',
+      date: 'Today',
+      status: train.delayMinutes > 0 ? `Delayed by ${train.delayMinutes} Minutes` : 'Running On Time',
       delayMinutes: train.delayMinutes || 0,
       alertPreferences: preferences,
     })
@@ -112,7 +136,7 @@ function AlertPreferencesPage() {
 
           <div>
             <span className="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">Total Distance</span>
-            <span className="font-black text-slate-900 dark:text-white block">{train.totalDistance || '138 km'}</span>
+            <span className="font-black text-slate-900 dark:text-white block">{typeof train.totalDistance === 'number' ? `${train.totalDistance} km` : (train.totalDistance || '138 km')}</span>
           </div>
         </div>
 
