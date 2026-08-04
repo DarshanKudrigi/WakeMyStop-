@@ -1,27 +1,11 @@
-import { useState } from 'react'
+import { useJourney } from '../context/JourneyContext'
 import CurrentJourneyCard from '../components/dashboard/CurrentJourneyCard'
 import TrainSearchCard from '../components/dashboard/TrainSearchCard'
 import LiveTrainStatusCard from '../components/dashboard/LiveTrainStatusCard'
 import FeaturesSection from '../components/dashboard/FeaturesSection'
 
 function DashboardPage() {
-  const [activeJourney, setActiveJourney] = useState(() => {
-    try {
-      const saved = typeof window !== 'undefined' ? localStorage.getItem('railalert_active_journey') : null
-      return saved ? JSON.parse(saved) : null
-    } catch {
-      return null
-    }
-  })
-
-  const handleCompleteJourney = () => {
-    setActiveJourney(null)
-    try {
-      localStorage.removeItem('railalert_active_journey')
-    } catch {
-      // Ignore
-    }
-  }
+  const { activeJourney, completeJourney } = useJourney()
 
   return (
     <div className="w-full space-y-6 sm:space-y-8">
@@ -29,7 +13,7 @@ function DashboardPage() {
       {activeJourney ? (
         <CurrentJourneyCard
           journey={activeJourney}
-          onCompleteJourney={handleCompleteJourney}
+          onCompleteJourney={completeJourney}
         />
       ) : null}
 

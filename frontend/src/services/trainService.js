@@ -1,15 +1,42 @@
 /**
  * Higher-Level Train & Station Service Layer
  * Interfaces with backend RailRadar API proxy via centralized apiClient.
- * Includes 5-minute in-memory search caching to conserve Railway API credits (50 req/day limit).
+ * Includes 5-minute in-memory & localStorage journey caching to conserve Railway API credits (50 req/day limit).
  */
 
 import { apiRequest } from './apiService'
 import { searchStations } from './stationSearchService'
+import { journeyCache } from './journeyCache'
 
 // 5-Minute In-Memory Search Cache (TTL: 300,000 ms)
 const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000
 const searchCache = new Map()
+
+/**
+ * Normalizes raw RailRadar train type/category into standard UI filter categories
+ */
+export function normalizeTrainCategory(rawType, trainName = '') {
+  if (!rawType && !trainName) return 'Express'
+  const str = String(rawType || '').trim().toLowerCase()
+  const nameStr = String(trainName || '').trim().toLowerCase()
+
+  if (str.includes('vande bharat') || nameStr.includes('vande bharat')) return 'Vande Bharat'
+  if (str.includes('shatabdi') || nameStr.includes('shatabdi')) return 'Shatabdi'
+  if (str.includes('rajdhani') || nameStr.includes('rajdhani')) return 'Rajdhani'
+  if (str.includes('memu') || nameStr.includes('memu')) return 'MEMU'
+  if (str.includes('passenger') || nameStr.includes('passenger') || str.includes('demu')) return 'Passenger'
+  if (
+    str.includes('superfast') ||
+    str.includes('sf') ||
+    str.includes('super fast') ||
+    nameStr.includes('sf express') ||
+    nameStr.includes('superfast')
+  ) {
+    return 'Superfast'
+  }
+
+  return 'Express'
+}
 
 /**
  * Converts 24-hour time "14:15" to 12-hour AM/PM format "02:15 PM"
@@ -66,7 +93,7 @@ function normalizeTrainData(rawItem) {
 
   const trainNo = String(trainObj.number || trainObj.trainNumber || trainObj.trainNo || rawItem.trainNo || '20608')
   const trainName = trainObj.name || trainObj.trainName || rawItem.trainName || 'VANDE BHARAT EXP'
-  const category = trainObj.type || trainObj.category || rawItem.category || 'Superfast'
+  const category = normalizeTrainCategory(trainObj.type || trainObj.category || rawItem.category, trainName)
 
   const depTimeRaw = fromObj.departure || rawItem.departureTime || '07:40 PM'
   const arrTimeRaw = toObj.arrival || rawItem.arrivalTime || '09:55 PM'
@@ -212,12 +239,27 @@ export async function searchTrains(fromStation, toStation, date) {
 }
 
 /**
- * Retrieves detailed train schedule and halts
+ * Retrieves detailed train schedule and halts with 5-minute Journey Cache
  */
-export async function getTrainDetails(trainNo) {
+export async function getTrainDetails(trainNo, options = {}) {
+  if (!trainNo) return null
+  const { bypassCache = false } = options
+
+  // Check 5-minute Journey Cache first
+  if (!bypassCache) {
+    const cached = journeyCache.get(trainNo, 'details')
+    if (cached && cached.isValid) {
+      if (import.meta.env.DEV) {
+        console.log(`[trainService] ⚡ Serving cached Train Details for ${trainNo} (0 API dispatches)`)
+      }
+      return cached.responseData
+    }
+  }
+
   try {
     const serverResult = await apiRequest(`/trains/${trainNo}`)
     if (serverResult && serverResult.data) {
+      journeyCache.set(trainNo, serverResult.data, 'details')
       return serverResult.data
     }
   } catch (error) {
@@ -227,12 +269,27 @@ export async function getTrainDetails(trainNo) {
 }
 
 /**
- * Retrieves real-time live status for active journey tracking (polled every 15s)
+ * Retrieves real-time live status for active journey tracking with 5-minute Journey Cache
  */
-export async function getLiveTrainStatus(trainNo) {
+export async function getLiveTrainStatus(trainNo, options = {}) {
+  if (!trainNo) return null
+  const { bypassCache = false } = options
+
+  // Check 5-minute Journey Cache first
+  if (!bypassCache) {
+    const cached = journeyCache.get(trainNo, 'live')
+    if (cached && cached.isValid) {
+      if (import.meta.env.DEV) {
+        console.log(`[trainService] ⚡ Serving cached Live Status for ${trainNo} (0 API dispatches)`)
+      }
+      return cached.responseData
+    }
+  }
+
   try {
     const serverResult = await apiRequest(`/trains/${trainNo}/live`)
     if (serverResult && serverResult.data) {
+      journeyCache.set(trainNo, serverResult, 'live')
       return serverResult
     }
   } catch (error) {

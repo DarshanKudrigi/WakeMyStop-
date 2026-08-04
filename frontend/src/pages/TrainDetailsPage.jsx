@@ -4,6 +4,7 @@ import { AlertTriangle, Train, Trash2 } from 'lucide-react'
 import { useJourney } from '../context/JourneyContext'
 import { getTrainDetails, getLiveTrainStatus } from '../services/trainService'
 import { buildLiveJourneyState } from '../services/journeyTrackingEngine'
+import { smartRefreshEngine } from '../services/smartRefreshEngine'
 
 // Modular Components
 import TrainSummaryCard from '../components/details/TrainSummaryCard'
@@ -14,29 +15,33 @@ import StickyBottomStatus from '../components/details/StickyBottomStatus'
 function TrainDetailsPage() {
   const { trainNo } = useParams()
   const navigate = useNavigate()
-  const { activeJourney, cancelJourney, refreshJourney } = useJourney()
+  const { activeJourney, cancelJourney } = useJourney()
 
   const [liveData, setLiveData] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [lastRefreshMsg, setLastRefreshMsg] = useState('Updated a few seconds ago.')
 
   // Active Journey check
   const isThisTrainConfirmed = activeJourney?.trainNo === String(trainNo)
 
-  // Load real RailRadar train details and live status
+  // 1. Single Live Status Fetch with Fallback (1 API Request Max)
   useEffect(() => {
     let isMounted = true
     setIsLoading(true)
 
     async function loadTrainData() {
       try {
-        const [detailsRes, liveRes] = await Promise.all([
-          getTrainDetails(trainNo),
-          getLiveTrainStatus(trainNo),
-        ])
+        // Fetch Live Status first (contains complete static + live info)
+        let liveRes = await getLiveTrainStatus(trainNo)
+
+        // Fallback to schedule details only if live payload is empty
+        if (!liveRes || !liveRes.data) {
+          liveRes = await getTrainDetails(trainNo)
+        }
 
         if (!isMounted) return
 
-        const unifiedState = buildLiveJourneyState(liveRes || detailsRes, {
+        const unifiedState = buildLiveJourneyState(liveRes, {
           trainNo,
           journeyStatus: isThisTrainConfirmed ? 'Active' : 'Planned',
         })
@@ -51,8 +56,21 @@ function TrainDetailsPage() {
 
     loadTrainData()
 
+    // Start Smart Refresh Engine scheduler ONLY when journey is active & confirmed
+    if (isThisTrainConfirmed) {
+      smartRefreshEngine.startScheduler(trainNo, (updatedState) => {
+        if (isMounted && updatedState) {
+          setLiveData(updatedState)
+          setLastRefreshMsg('Updated a few seconds ago.')
+        }
+      })
+    }
+
     return () => {
       isMounted = false
+      if (isThisTrainConfirmed) {
+        smartRefreshEngine.stopScheduler()
+      }
     }
   }, [trainNo, isThisTrainConfirmed])
 
@@ -77,19 +95,16 @@ function TrainDetailsPage() {
     stops: [],
   }
 
-  // Live Refresh state
+  // Live Refresh state driven by Smart Refresh Engine
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const handleRefreshStatus = async () => {
     setIsRefreshing(true)
-    if (isThisTrainConfirmed) {
-      await refreshJourney()
-    } else {
-      const liveRes = await getLiveTrainStatus(trainNo)
-      if (liveRes) {
-        setLiveData(buildLiveJourneyState(liveRes, { trainNo }))
-      }
+    const result = await smartRefreshEngine.triggerManualRefresh(trainNo)
+    if (result && result.liveState) {
+      setLiveData(result.liveState)
     }
+    setLastRefreshMsg('Updated a few seconds ago.')
     setTimeout(() => {
       setIsRefreshing(false)
     }, 600)
@@ -169,6 +184,7 @@ function TrainDetailsPage() {
         onConfirmClick={handleConfirmJourney}
         onCancelClick={handleOpenCancelDialog}
         isJourneyConfirmed={isThisTrainConfirmed}
+        lastRefreshMsg={lastRefreshMsg}
       />
 
       {/* 2. JOURNEY PROGRESS (Displayed ONLY in Mode 2) */}
@@ -207,7 +223,7 @@ function TrainDetailsPage() {
                 Active Journey Detected
               </h3>
               <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 leading-relaxed">
-                You already have an active journey. Only one journey can be tracked at a time. Please complete or cancel your existing journey before starting another.
+                Only one journey can be tracked at a time. Please complete or cancel your existing journey before starting another.
               </p>
             </div>
 
@@ -218,27 +234,15 @@ function TrainDetailsPage() {
                 className="w-full py-3 px-5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs shadow-md cursor-pointer flex items-center justify-center gap-2"
               >
                 <Train className="w-4 h-4" />
-                <span>View Current Journey</span>
+                <span>View Active Journey</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => {
-                  setIsConflictModalOpen(false)
-                  setIsCancelConfirmOpen(true)
-                }}
-                className="w-full py-2.5 px-5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-600 dark:text-rose-400 font-black text-xs border border-rose-200 dark:border-rose-800 cursor-pointer flex items-center justify-center gap-2 transition-colors"
+                onClick={handleConfirmCancelJourney}
+                className="w-full py-3 px-5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-extrabold text-xs transition-colors cursor-pointer"
               >
-                <Trash2 className="w-4 h-4" />
-                <span>Cancel Current Journey</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsConflictModalOpen(false)}
-                className="w-full py-2 px-4 text-xs font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 cursor-pointer pt-1"
-              >
-                Close
+                End Current Journey & Track This Train
               </button>
             </div>
 
@@ -246,38 +250,39 @@ function TrainDetailsPage() {
         </div>
       )}
 
-      {/* CANCEL JOURNEY CONFIRMATION DIALOG */}
+      {/* CANCEL CONFIRMATION MODAL */}
       {isCancelConfirmOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-white dark:bg-[#161c26] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-2xl space-y-4 text-center animate-in fade-in zoom-in-95 duration-150">
+          <div className="w-full max-w-md bg-white dark:bg-[#161c26] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-7 shadow-2xl space-y-5 text-center animate-in fade-in zoom-in-95 duration-150">
             
-            <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto border border-rose-500/20">
-              <Trash2 className="w-6 h-6 text-rose-500" />
+            <div className="w-14 h-14 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto border border-rose-500/20">
+              <Trash2 className="w-7 h-7" />
             </div>
 
-            <div className="space-y-1.5">
-              <h3 className="text-lg font-black text-slate-900 dark:text-white">
-                Cancel Journey?
+            <div className="space-y-2">
+              <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                Cancel Active Journey?
               </h3>
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                Are you sure you want to stop monitoring this journey? This will remove your active journey and all active alerts.
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 leading-relaxed">
+                This will stop live tracking and alerts for this train. You can start a new journey anytime.
               </p>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
+            <div className="flex items-center gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => setIsCancelConfirmOpen(false)}
-                className="w-1/2 py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-extrabold text-xs hover:bg-slate-200 cursor-pointer"
+                className="flex-1 py-3 px-4 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-extrabold text-xs transition-colors cursor-pointer"
               >
-                No
+                Keep Tracking
               </button>
+
               <button
                 type="button"
                 onClick={handleConfirmCancelJourney}
-                className="w-1/2 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs shadow-md cursor-pointer"
+                className="flex-1 py-3 px-4 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs shadow-md transition-colors cursor-pointer"
               >
-                Yes, Cancel Journey
+                Yes, End Journey
               </button>
             </div>
 

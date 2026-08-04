@@ -16,6 +16,7 @@ function CurrentJourneyCard({ journey }) {
   }
 
   const isDelayed = active.delayMinutes > 0
+  const expectedEta = active.expectedArrival || active.nextStation?.arrivalTime || '--'
 
   return (
     <div className="w-full bg-gradient-to-r from-blue-50/90 via-indigo-50/75 to-blue-100/90 dark:from-blue-950/40 dark:via-indigo-950/30 dark:to-blue-950/40 rounded-3xl border border-blue-200/90 dark:border-blue-800/60 p-5 sm:p-7 shadow-md space-y-5 relative overflow-hidden transition-all duration-300">
@@ -57,12 +58,12 @@ function CurrentJourneyCard({ journey }) {
           <div className="flex items-center gap-4 text-xs font-bold text-slate-600 dark:text-slate-400 flex-wrap">
             <div className="flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-              <span>{active.date || 'Today'}</span>
+              <span>{active.journeyDate || active.date || 'Today'}</span>
             </div>
 
             <div className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-              <span>Expected Time of Arrival: <strong className="text-slate-900 dark:text-white font-bold">{active.expectedArrival || '09:12 PM'}</strong></span>
+              <span>Expected Time of Arrival: <strong className="text-slate-900 dark:text-white font-bold">{expectedEta}</strong></span>
             </div>
           </div>
         </div>

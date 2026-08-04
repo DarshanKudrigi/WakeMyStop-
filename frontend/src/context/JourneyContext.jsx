@@ -1,106 +1,79 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { getActiveJourney, saveActiveJourney, cancelActiveJourney } from '../utils/activeJourney'
+import { activeJourneyStore } from '../services/activeJourneyStore'
 import { buildLiveJourneyState } from '../services/journeyTrackingEngine'
-import { autoRefreshService } from '../services/autoRefreshService'
+import { journeyCache } from '../services/journeyCache'
+import { liveJourneyEngine } from '../services/liveJourneyEngine'
 import { notificationService } from '../services/notificationService'
 
 const JourneyContext = createContext(null)
 
 export function JourneyProvider({ children }) {
-  // Reactive Global Active Journey State
-  const [activeJourney, setActiveJourney] = useState(() => getActiveJourney())
+  // Centralized Active Journey Store state
+  const [activeJourney, setActiveJourney] = useState(() => activeJourneyStore.getStore())
 
-  const trainNo = activeJourney?.trainNo
-
-  // Synchronize autoRefreshService ONLY when active trainNo changes
+  // Subscribe to liveJourneyEngine state synchronizations
   useEffect(() => {
-    if (trainNo && activeJourney?.journeyStatus === 'Active') {
-      autoRefreshService.start(trainNo)
-    } else {
-      autoRefreshService.stop()
-    }
-    return () => {
-      autoRefreshService.stop()
-    }
-  }, [trainNo, activeJourney?.journeyStatus])
-
-  // Subscribe to autoRefreshService updates with single-source-of-truth normalization engine
-  useEffect(() => {
-    const unsubscribe = autoRefreshService.subscribe((rawLivePayload) => {
-      if (!rawLivePayload) return
-      setActiveJourney((prev) => {
-        if (!prev) return null
-
-        const updatedState = buildLiveJourneyState(rawLivePayload, prev)
-        if (!updatedState) return prev
-
-        saveActiveJourney(updatedState)
-        return updatedState
-      })
+    const unsubscribe = liveJourneyEngine.subscribe(() => {
+      setActiveJourney(activeJourneyStore.getStore())
     })
-
     return () => unsubscribe()
   }, [])
 
   /**
-   * Starts & activates a new journey with user's selected alert preferences.
+   * Starts & activates a new journey using cached live data (0 additional API dispatches)
    */
   const startJourney = useCallback((journeyPayload) => {
-    const initialLiveState = buildLiveJourneyState(null, {
+    const trainNo = String(journeyPayload.trainNo || '').trim()
+
+    // 1. Reuse 5-minute cached response if available
+    const cachedDetails = journeyCache.get(trainNo, 'details')
+    const cachedLive = journeyCache.get(trainNo, 'live')
+    const rawPayload = cachedLive?.responseData || cachedDetails?.responseData || null
+
+    const liveState = buildLiveJourneyState(rawPayload, {
       ...journeyPayload,
       journeyStatus: 'Active',
-      journeyId: `jrn_${Date.now()}`,
+      journeyId: `jrn_${trainNo}_${Date.now()}`,
     })
 
-    saveActiveJourney(initialLiveState)
-    setActiveJourney(initialLiveState)
+    // 2. Save inside Centralized Active Journey Store
+    const createdStore = activeJourneyStore.createActiveJourney({
+      ...journeyPayload,
+      trainNo,
+      lastLiveResponse: rawPayload,
+      liveState,
+      cacheCreatedTime: cachedLive?.cachedAt || cachedDetails?.cachedAt || Date.now(),
+      cacheExpiryTime: cachedLive?.expiresAt || cachedDetails?.expiresAt || (Date.now() + 5 * 60 * 1000),
+    })
+
+    setActiveJourney(createdStore)
 
     // Trigger activation alert event ONCE
     notificationService.triggerAlert({
       type: 'JOURNEY_STARTED',
-      message: `RailAlert AI started monitoring ${initialLiveState.trainName} (${initialLiveState.trainNo})`,
-      trainNo: initialLiveState.trainNo,
+      message: `RailAlert AI started monitoring ${createdStore.trainName} (${createdStore.trainNo})`,
+      trainNo: createdStore.trainNo,
       preferences: journeyPayload.alertPreferences || {},
     })
 
-    // Immediately trigger poll to fetch live data
-    autoRefreshService.start(initialLiveState.trainNo)
-
-    return initialLiveState
+    return createdStore
   }, [])
 
   /**
    * Cancels the active journey
    */
   const cancelJourney = useCallback(() => {
-    cancelActiveJourney()
+    activeJourneyStore.cancelJourney()
     setActiveJourney(null)
-    autoRefreshService.stop()
   }, [])
 
   /**
    * Completes the active journey
    */
   const completeJourney = useCallback(() => {
-    cancelActiveJourney()
+    activeJourneyStore.completeJourney()
     setActiveJourney(null)
-    autoRefreshService.stop()
   }, [])
-
-  /**
-   * Manual refresh trigger (Resets background 15s timer)
-   */
-  const refreshJourney = useCallback(async () => {
-    if (!activeJourney) return null
-    const rawData = await autoRefreshService.manualRefresh()
-    if (rawData) {
-      const updatedState = buildLiveJourneyState(rawData, activeJourney)
-      saveActiveJourney(updatedState)
-      setActiveJourney(updatedState)
-      return updatedState
-    }
-    return activeJourney
-  }, [activeJourney])
 
   const value = {
     activeJourney,
@@ -108,7 +81,6 @@ export function JourneyProvider({ children }) {
     startJourney,
     cancelJourney,
     completeJourney,
-    refreshJourney,
   }
 
   return <JourneyContext.Provider value={value}>{children}</JourneyContext.Provider>

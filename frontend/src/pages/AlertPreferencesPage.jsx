@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Play, Pause, CheckCircle2, Info, Check } from 'lucide-react'
 import { useJourney } from '../context/JourneyContext'
-import { getTrainDetails } from '../services/trainService'
+import { getLiveTrainStatus, getTrainDetails } from '../services/trainService'
 import { buildLiveJourneyState } from '../services/journeyTrackingEngine'
 
 function AlertPreferencesPage() {
@@ -14,11 +14,19 @@ function AlertPreferencesPage() {
 
   useEffect(() => {
     let isMounted = true
-    getTrainDetails(trainNo).then((res) => {
+    async function fetchTrainInfo() {
+      // Reuses cached response from journeyCache (0 API calls)
+      let res = await getLiveTrainStatus(trainNo)
+      if (!res || !res.data) {
+        res = await getTrainDetails(trainNo)
+      }
       if (!isMounted || !res) return
       const liveState = buildLiveJourneyState(res, { trainNo })
       setLiveTrain(liveState)
-    })
+    }
+
+    fetchTrainInfo()
+
     return () => {
       isMounted = false
     }
@@ -67,17 +75,18 @@ function AlertPreferencesPage() {
   }
 
   const handleConfirmAndStart = () => {
-    // 1. Activate journey in global reactive context
+    // 1. Activate journey in global reactive context (0 extra API calls)
     startJourney({
       trainNo: train.trainNo,
       trainName: train.trainName,
       from: train.from,
       to: train.to,
       departureTime: train.departureTime,
-      totalDistance: train.totalDistance || '138 km',
+      totalDistance: typeof train.totalDistance === 'number' ? `${train.totalDistance} km` : (train.totalDistance || '138 km'),
       date: 'Today',
       status: train.delayMinutes > 0 ? `Delayed by ${train.delayMinutes} Minutes` : 'Running On Time',
       delayMinutes: train.delayMinutes || 0,
+      expectedArrival: train.expectedArrival || train.nextStation?.arrivalTime || '--',
       alertPreferences: preferences,
     })
 

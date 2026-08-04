@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react'
 import { RefreshCw, Navigation, Trash2 } from 'lucide-react'
 
 function StickyBottomStatus({
@@ -10,21 +9,8 @@ function StickyBottomStatus({
   visible,
   isJourneyConfirmed,
 }) {
-  // Manual refresh countdown cooldown (15 seconds lockout)
-  const [cooldown, setCooldown] = useState(0)
-
-  // Cooldown countdown timer when manual refresh is clicked
-  useEffect(() => {
-    if (cooldown <= 0) return
-    const cdTimer = setInterval(() => {
-      setCooldown((prev) => Math.max(0, prev - 1))
-    }, 1000)
-    return () => clearInterval(cdTimer)
-  }, [cooldown])
-
   const handleManualRefresh = () => {
-    if (cooldown > 0 || isRefreshing) return
-    setCooldown(15) // Lock out manual refresh for 15s
+    if (isRefreshing) return
     if (onRefreshClick) onRefreshClick()
   }
 
@@ -88,84 +74,59 @@ function StickyBottomStatus({
               {/* Row 2: Bottom Actions & Static Timestamp Label */}
               <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800/80">
                 
-                {/* LEFT: Refresh Icon + Static "Updated a few seconds ago" / Cooldown */}
+                {/* LEFT: Refresh Icon + Static "Updated a few seconds ago" */}
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={handleManualRefresh}
-                    disabled={cooldown > 0 || isRefreshing}
-                    title={cooldown > 0 ? `Refresh available in ${cooldown}s` : 'Refresh status'}
-                    className={`p-2 rounded-xl transition-all flex items-center justify-center cursor-pointer border ${
-                      cooldown > 0
-                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 cursor-not-allowed'
-                        : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
-                    }`}
+                    disabled={isRefreshing}
+                    title="Refresh status"
+                    className="p-2 rounded-xl transition-all flex items-center justify-center cursor-pointer border bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700"
                   >
                     <RefreshCw className={`w-4 h-4 text-blue-600 dark:text-blue-400 ${isRefreshing ? 'animate-spin' : ''}`} />
                   </button>
 
                   <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                    {cooldown > 0 ? `Wait ${cooldown}s` : 'Updated a few seconds ago'}
+                    Updated a few seconds ago
                   </span>
                 </div>
 
-                {/* RIGHT: Cancel Journey Button */}
+                {/* RIGHT: Red Outlined Cancel Journey Button */}
                 <button
                   type="button"
                   onClick={onCancelClick}
-                  className="py-1.5 px-3.5 rounded-xl border border-rose-500/80 hover:border-rose-600 bg-rose-50/50 dark:bg-rose-950/30 hover:bg-rose-100 text-rose-600 dark:text-rose-400 font-black text-xs transition-all cursor-pointer flex items-center gap-1.5"
+                  className="py-1.5 px-3.5 rounded-xl border border-rose-500/80 hover:border-rose-600 bg-rose-50/50 dark:bg-rose-950/30 hover:bg-rose-100 text-rose-600 dark:text-rose-400 font-black text-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>Cancel Journey</span>
                 </button>
+
               </div>
 
             </div>
           ) : (
-            /* MODE 1: PLANNING FOOTER MODE */
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            /* MODE 1: PLANNING FOOTER */
+            <div className="flex items-center justify-between gap-3">
               <div className="space-y-0.5 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white truncate">
-                    {train.runningStatus || (train.isDelayed ? `Delayed by ${train.delayMinutes} mins` : `Left ${train.fromName || train.from} at ${train.departureTime}`)}
-                  </span>
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-black border ${
-                    train.delayMinutes > 0
-                      ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-400 border-rose-300 dark:border-rose-800'
-                      : 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800'
-                  }`}>
-                    {train.delayMinutes > 0 ? `${train.delayMinutes} min delay` : 'On Time'}
-                  </span>
+                <div className="flex items-center gap-2 text-xs sm:text-sm font-black text-slate-900 dark:text-white truncate">
+                  <span>{train.trainName}</span>
                 </div>
-                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                  {cooldown > 0 ? `Wait ${cooldown}s` : 'Updated a few seconds ago'}
-                </p>
+                <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                  {train.runningStatus || 'Running On Time'}
+                </div>
               </div>
 
-              <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
-                <button
-                  type="button"
-                  onClick={handleManualRefresh}
-                  disabled={cooldown > 0 || isRefreshing}
-                  className="py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-extrabold text-xs transition-colors cursor-pointer border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 text-blue-600 dark:text-blue-400 ${isRefreshing ? 'animate-spin' : ''}`} />
-                  <span className="hidden xs:inline">{cooldown > 0 ? `${cooldown}s` : 'Refresh'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={onConfirmClick}
-                  className="py-2 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>Confirm Journey</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={onConfirmClick}
+                className="py-2.5 px-5 rounded-2xl bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all cursor-pointer shrink-0"
+              >
+                Confirm Journey
+              </button>
             </div>
           )}
 
         </div>
-
       </div>
     </div>
   )
