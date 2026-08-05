@@ -1,7 +1,7 @@
 /**
  * Smart Refresh Engine & Intelligent API Scheduler
  * Single Source of Truth for Live API refresh timing decisions.
- * Optimizes Railway API credit consumption (50 req/day limit) through dynamic intervals and decision rules.
+ * Optimizes Railway API credit consumption through dynamic intervals, refresh budget caps, and singleton protection.
  */
 
 import { journeyCache } from './journeyCache'
@@ -17,6 +17,16 @@ export const REFRESH_INTERVAL_RULES = [
   { minRemainingMinutes: 30, intervalMs: 10 * 60 * 1000 },  // 30-60 Mins -> 10 mins
   { minRemainingMinutes: 0, intervalMs: 5 * 60 * 1000 },     // < 30 Mins -> 5 mins
 ]
+
+/**
+ * Returns maximum allowed API refresh budget based on total journey duration (in hours)
+ */
+export function getMaxAllowedRefreshes(totalHours = 3) {
+  if (totalHours <= 2) return 6
+  if (totalHours <= 5) return 8
+  if (totalHours <= 8) return 10
+  return 12
+}
 
 /**
  * Calculates optimal refresh interval in ms based on remaining journey distance/time
@@ -43,6 +53,7 @@ class SmartRefreshEngineManager {
     this.timerId = null
     this.isRefreshing = false
     this.isJourneyPageOpen = false
+    this.refreshCount = 0
     this.listeners = new Set()
   }
 
@@ -61,34 +72,49 @@ class SmartRefreshEngineManager {
       return { canRefresh: false, reason: 'JOURNEY_PAGE_NOT_OPEN' }
     }
 
-    // 3. Has cache expired (> 5 minutes old)?
+    // 3. Has total refresh count exceeded allocated journey budget cap?
+    const totalDist = store.progressData?.totalDistance || 180
+    const totalHours = Math.max(1, Math.round(totalDist / 60))
+    const maxAllowed = getMaxAllowedRefreshes(totalHours)
+    if (this.refreshCount >= maxAllowed) {
+      return { canRefresh: false, reason: `REFRESH_BUDGET_EXCEEDED (${this.refreshCount}/${maxAllowed})` }
+    }
+
+    // 4. Has cache expired (< 3.5 minutes old)?
     const cachedLive = journeyCache.get(trainNo, 'live')
     if (cachedLive && cachedLive.isValid) {
       return { canRefresh: false, reason: 'CACHE_STILL_VALID', cachedData: cachedLive.responseData }
     }
 
-    // 4. Has another refresh already started?
+    // 5. Has another refresh already started?
     if (this.isRefreshing) {
       return { canRefresh: false, reason: 'REFRESH_IN_PROGRESS' }
     }
 
-    // 5. All checks passed -> Proceed to refresh
+    // All checks passed -> Proceed to refresh
     return { canRefresh: true, reason: 'CACHE_EXPIRED_AND_VISIBLE' }
   }
 
   /**
-   * Starts scheduler ONLY when Journey page is mounted and visible
+   * Starts scheduler ONLY when Journey page is mounted and visible (Strict Singleton Protection)
    */
   startScheduler(trainNo, subscriberCallback = null) {
     if (!trainNo) return
-    this.activeTrainNo = String(trainNo).trim()
-    this.isJourneyPageOpen = true
+    const formattedNo = String(trainNo).trim()
 
     if (subscriberCallback) {
       this.listeners.add(subscriberCallback)
     }
 
-    console.log(`[SmartRefreshEngine] 🚀 Scheduler activated for train ${this.activeTrainNo} (Journey Page Visible)`)
+    // Singleton Guard: If already running for same train number, avoid re-initialization
+    if (this.isJourneyPageOpen && this.activeTrainNo === formattedNo && this.timerId) {
+      return
+    }
+
+    this.activeTrainNo = formattedNo
+    this.isJourneyPageOpen = true
+
+    console.log(`[SmartRefreshEngine] 🚀 Scheduler started for train ${this.activeTrainNo}`)
 
     // Schedule next refresh cycle based on current journey progress
     this.scheduleNextCycle()
@@ -103,7 +129,7 @@ class SmartRefreshEngineManager {
       clearTimeout(this.timerId)
       this.timerId = null
     }
-    console.log('[SmartRefreshEngine] 🛑 Scheduler stopped (User navigated away from Journey Page)')
+    console.log('[SmartRefreshEngine] 🛑 Scheduler stopped')
   }
 
   /**
@@ -121,7 +147,7 @@ class SmartRefreshEngineManager {
     const currentProgress = store?.progressData || null
     const nextIntervalMs = calculateRefreshIntervalMs(currentProgress)
 
-    console.log(`[SmartRefreshEngine] ⏰ Next dynamic refresh scheduled in ${Math.round(nextIntervalMs / 60000)} minutes`)
+    console.log(`[SmartRefreshEngine] ⏰ Next dynamic refresh scheduled in ${Math.round(nextIntervalMs / 60000)}m`)
 
     this.timerId = setTimeout(async () => {
       await this.executeLiveRefresh(this.activeTrainNo)
@@ -138,7 +164,7 @@ class SmartRefreshEngineManager {
     const decision = this.evaluateRefreshDecision(trainNo)
 
     if (!decision.canRefresh) {
-      console.log(`[SmartRefreshEngine] ⚡ Skipping live refresh (Reason: ${decision.reason}) - 0 API calls`)
+      console.log(`[SmartRefreshEngine] ⚡ Skipping refresh (${decision.reason})`)
       return decision.cachedData || null
     }
 
@@ -147,6 +173,7 @@ class SmartRefreshEngineManager {
     try {
       const result = await liveJourneyEngine.processLiveRefresh(trainNo)
       if (result && result.data) {
+        this.refreshCount += 1
         this.notifyListeners(result.data)
         return result.data
       }
@@ -168,9 +195,9 @@ class SmartRefreshEngineManager {
 
     const cached = journeyCache.get(targetTrain, 'live') || journeyCache.get(targetTrain, 'details')
 
-    // If cache is still valid (< 5 min), skip API call and reuse cache
+    // If cache is still valid (< 3.5 min), skip API call and reuse cache
     if (cached && cached.isValid) {
-      console.log(`[SmartRefreshEngine] ⚡ Manual refresh reused valid cache for ${targetTrain} (0 API dispatches)`)
+      console.log(`[SmartRefreshEngine] ⚡ Manual refresh reused cache for ${targetTrain} (0 API calls)`)
       const store = activeJourneyStore.getStore()
       const liveState = buildLiveJourneyState(cached.responseData, store || { trainNo: targetTrain })
       return {
@@ -182,6 +209,10 @@ class SmartRefreshEngineManager {
 
     // Cache expired -> Dispatch live update
     const freshResult = await liveJourneyEngine.processLiveRefresh(targetTrain)
+    if (freshResult && freshResult.data) {
+      this.refreshCount += 1
+    }
+
     return {
       liveState: freshResult?.data || null,
       isFromCache: false,
@@ -200,13 +231,6 @@ class SmartRefreshEngineManager {
         console.error('[SmartRefreshEngine] Listener error:', err.message)
       }
     })
-  }
-
-  /**
-   * Unsubscribes a listener
-   */
-  unsubscribe(fn) {
-    this.listeners.delete(fn)
   }
 }
 

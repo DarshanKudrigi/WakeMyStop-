@@ -16,17 +16,16 @@ function StickyBottomStatus({
 
   if (!train) return null
 
-  const progressPercent = typeof train.journeyPercentage === 'number' ? train.journeyPercentage : 68
-  const remainingDistance = train.distanceRemaining !== undefined ? `${train.distanceRemaining} km` : '46 km'
+  const progressPercent = typeof train.journeyPercentage === 'number' ? train.journeyPercentage : 0
+  const remainingDistance = train.distanceRemaining !== undefined ? `${train.distanceRemaining} km` : '0 km'
 
   return (
     <div
-      className={`fixed bottom-3 left-0 right-0 z-40 px-3 sm:px-4 transition-all duration-300 transform ease-in-out ${
-        visible ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-16 opacity-0 pointer-events-none'
-      }`}
+      className={`fixed bottom-3 left-0 right-0 z-40 px-3 sm:px-4 transition-all duration-300 transform ease-in-out ${visible ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-16 opacity-0 pointer-events-none'
+        }`}
     >
       <div className="max-w-4xl mx-auto w-full relative">
-        
+
         {/* Floating "In Train?" Button (Attached to top-right edge above footer) */}
         <div className="absolute -top-7 right-4 sm:right-6 z-50">
           <button
@@ -41,14 +40,14 @@ function StickyBottomStatus({
 
         {/* Card-Width Bounded Compact Sticky Footer Sheet */}
         <div className="w-full bg-white/95 dark:bg-[#12161f]/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800/90 shadow-2xl rounded-2xl p-3.5 sm:p-4">
-          
+
           {isJourneyConfirmed ? (
             /* MODE 2: SIMPLIFIED ACTIVE JOURNEY FOOTER */
             <div className="space-y-3">
-              
+
               {/* Row 1: Large Progress Bar, Percentage & Remaining Distance */}
               <div className="flex items-center justify-between gap-4 text-xs font-black">
-                
+
                 {/* Progress Bar & Percentage */}
                 <div className="space-y-1.5 flex-1 min-w-0">
                   <div className="flex items-center justify-between text-xs font-black">
@@ -73,8 +72,8 @@ function StickyBottomStatus({
 
               {/* Row 2: Bottom Actions & Static Timestamp Label */}
               <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800/80">
-                
-                {/* LEFT: Refresh Icon + Static "Updated a few seconds ago" */}
+
+                {/* LEFT: Refresh Icon + Red Styled "Updated a few seconds ago" */}
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -86,7 +85,7 @@ function StickyBottomStatus({
                     <RefreshCw className={`w-4 h-4 text-blue-600 dark:text-blue-400 ${isRefreshing ? 'animate-spin' : ''}`} />
                   </button>
 
-                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                  <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400">
                     Updated a few seconds ago
                   </span>
                 </div>

@@ -68,7 +68,6 @@ export function getExpectedTime(scheduledStr, actualStr, delayMins = 0) {
 /**
  * Helper to safely extract station code from any RailRadar station object shape
  */
-
 function getStationCode(s) {
   if (!s) return ''
   return s.stationCode || s.station?.code || s.code || ''
@@ -131,6 +130,7 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
     code: getStationCode(currentRouteItem) || getStationCode(currLoc) || trainInfo.source?.code || userJourneyMeta.from || 'MYS',
     name: getStationName(currentRouteItem) || getStationName(currLoc) || trainInfo.source?.name || userJourneyMeta.from || 'MYSORE JN',
     status: currentRouteItem?.status || currLoc.status || 'at-station',
+    sequence: currentRouteItem?.sequence || currentSeq,
     departureTime: formatTime12(currentRouteItem?.actualDeparture || currentRouteItem?.scheduledDeparture || currentRouteItem?.departure),
   }
 
@@ -143,6 +143,7 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
     code: getStationCode(nextRouteItem) || getStationCode(nextHaltObj) || trainInfo.destination?.code || userJourneyMeta.to || 'SBC',
     name: getStationName(nextRouteItem) || getStationName(nextHaltObj) || trainInfo.destination?.name || userJourneyMeta.to || 'KSR BENGALURU',
     distance: nextHaltObj.distance ? `${nextHaltObj.distance} km` : (nextRouteItem?.distance ? `${nextRouteItem.distance} km` : '12 km'),
+    sequence: nextRouteItem?.sequence || (currentSeq + 1),
     arrivalTime: formatTime12(nextRouteItem?.actualArrival || nextRouteItem?.scheduledArrival || nextRouteItem?.arrival),
     platform: nextRouteItem?.platform ? `PF ${nextRouteItem.platform}` : 'PF 1',
   }
@@ -152,25 +153,38 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
     code: getStationCode(prevRouteItem) || trainInfo.source?.code || 'MYS',
     name: getStationName(prevRouteItem) || trainInfo.source?.name || 'MYSORE JN',
     status: 'departed',
+    sequence: prevRouteItem?.sequence || Math.max(1, currentSeq - 1),
   }
 
-  // Calculate distance & progress
+  // Overall route distance & current train position
   const totalDistance = trainInfo.distance || (rawRoute.length > 0 ? rawRoute[rawRoute.length - 1].distance : 140) || 140
   const distanceCovered = currentRouteItem?.distance || (currLoc.segmentProgress ? totalDistance * currLoc.segmentProgress : 0) || 0
-  const distanceRemaining = Math.max(0, Math.round((totalDistance - distanceCovered) * 10) / 10)
+
+  // Calculate user-specific trip segment bounds (from station to to station)
+  const userFromCode = userJourneyMeta.from || trainInfo.source?.code || ''
+  const userToCode = userJourneyMeta.to || trainInfo.destination?.code || ''
+
+  const fromItem = rawRoute.find((s) => getStationCode(s) === userFromCode)
+  const toItem = rawRoute.find((s) => getStationCode(s) === userToCode)
+
+  const userStartDist = typeof fromItem?.distance === 'number' ? fromItem.distance : 0
+  const userEndDist = typeof toItem?.distance === 'number' ? toItem.distance : (totalDistance > 0 ? totalDistance : 140)
+
+  const userSegmentTotal = Math.max(1, userEndDist - userStartDist)
+  const userDistanceCovered = Math.max(0, distanceCovered - userStartDist)
 
   let journeyPercentage = 0
-  if (totalDistance > 0) {
-    journeyPercentage = Math.min(100, Math.max(0, Math.round((distanceCovered / totalDistance) * 100)))
-  } else if (rawRoute.length > 0) {
-    journeyPercentage = Math.min(100, Math.max(0, Math.round((currentSeq / rawRoute.length) * 100)))
+  if (userSegmentTotal > 0) {
+    journeyPercentage = Math.min(100, Math.max(0, Math.round((userDistanceCovered / userSegmentTotal) * 100)))
   }
 
   if (overallStatus === 'completed') {
     journeyPercentage = 100
   }
 
-  // Enrich stops list for timeline components with distinct scheduled and actual/expected times
+  const distanceRemaining = Math.max(0, Math.round((userEndDist - Math.max(userStartDist, distanceCovered)) * 10) / 10)
+
+  // Enrich stops list for timeline components with distinct scheduled and actual/expected times + raw sequence & distance
   const stopsSource = haltStops.length > 0 ? haltStops : rawRoute
   const stops = stopsSource.map((s, idx) => {
     const stCode = getStationCode(s) || `ST${idx}`
@@ -195,8 +209,12 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
     const schDep = rawSchDep ? formatTime12(rawSchDep) : '--'
     const actDep = getExpectedTime(rawSchDep, s.actualDeparture, stationDelayDep)
 
+    const numDist = typeof s.distance === 'number' ? s.distance : (parseFloat(s.distance) || 0)
+
     return {
       sequence: s.sequence || idx + 1,
+      rawSequence: s.sequence || idx + 1,
+      rawDistance: numDist,
       code: stCode,
       name: stName,
       schArr,
@@ -207,11 +225,16 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
       departureTime: actDep !== '--' ? actDep : schDep,
       haltMinutes: s.haltMinutes || 2,
       platform: s.platform ? `PF ${s.platform}` : 'PF 1',
-      distance: s.distance !== undefined ? s.distance : 0,
+      distance: numDist !== undefined ? `${numDist} km` : '0 km',
       status: stopStatus,
       delayMinutes: stationDelayDep || stationDelayArr || 0,
     }
   })
+
+  // Calculate true Destination ETA (Expected Time of Arrival at user's destination)
+  const targetDestCode = userJourneyMeta.to || trainInfo.destination?.code || ''
+  const destStop = stops.find((st) => st.code === targetDestCode) || stops[stops.length - 1]
+  const destinationEta = (destStop?.actArr && destStop.actArr !== '--') ? destStop.actArr : ((destStop?.schArr && destStop.schArr !== '--') ? destStop.schArr : nextStation.arrivalTime)
 
   return {
     journeyId: userJourneyMeta.journeyId || `journey_${trainNo}_${Date.now()}`,
@@ -225,12 +248,13 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
     currentStation,
     nextStation,
     previousStation,
+    currentSeq,
     delayMinutes,
-    expectedArrival: nextStation.arrivalTime,
+    expectedArrival: destinationEta,
     journeyPercentage,
     distanceCovered: Math.round(distanceCovered * 10) / 10,
     distanceRemaining,
-    totalDistance,
+    totalDistance: userSegmentTotal,
     runningStatus: deriveRunningStatus(overallStatus, delayMinutes),
     platform: nextStation.platform,
     lastUpdated,

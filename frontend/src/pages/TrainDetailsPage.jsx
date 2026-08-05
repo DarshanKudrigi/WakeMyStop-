@@ -5,6 +5,7 @@ import { useJourney } from '../context/JourneyContext'
 import { getTrainDetails, getLiveTrainStatus } from '../services/trainService'
 import { buildLiveJourneyState } from '../services/journeyTrackingEngine'
 import { smartRefreshEngine } from '../services/smartRefreshEngine'
+import { journeyCache } from '../services/journeyCache'
 
 // Modular Components
 import TrainSummaryCard from '../components/details/TrainSummaryCard'
@@ -17,21 +18,38 @@ function TrainDetailsPage() {
   const navigate = useNavigate()
   const { activeJourney, cancelJourney } = useJourney()
 
-  const [liveData, setLiveData] = useState(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [lastRefreshMsg, setLastRefreshMsg] = useState('Updated a few seconds ago.')
-
   // Active Journey check
   const isThisTrainConfirmed = activeJourney?.trainNo === String(trainNo)
 
-  // 1. Single Live Status Fetch with Fallback (1 API Request Max)
+  // Synchronous Cache Initialization: Instant timeline render with 0 loading flicker when cache exists
+  const [liveData, setLiveData] = useState(() => {
+    if (isThisTrainConfirmed && activeJourney && Array.isArray(activeJourney.stops) && activeJourney.stops.length > 0) {
+      return activeJourney
+    }
+    const cachedLive = journeyCache.get(trainNo, 'live')
+    const cachedDetails = journeyCache.get(trainNo, 'details')
+    const rawPayload = cachedLive?.responseData || cachedDetails?.responseData || null
+    if (rawPayload) {
+      return buildLiveJourneyState(rawPayload, { trainNo })
+    }
+    return null
+  })
+
+  const [isLoading, setIsLoading] = useState(() => !Boolean(liveData))
+  const [lastRefreshMsg, setLastRefreshMsg] = useState('Updated a few seconds ago.')
+
+  // 1. Single Live Status Fetch with Fallback (1 API Request Max when cache missing)
   useEffect(() => {
     let isMounted = true
-    setIsLoading(true)
+
+    // If cache already initialized state, skip setting loading to true
+    if (!liveData) {
+      setIsLoading(true)
+    }
 
     async function loadTrainData() {
       try {
-        // Fetch Live Status first (contains complete static + live info)
+        // Fetch Live Status (reuses 3.5-min cache internally, 0 network calls if cache valid)
         let liveRes = await getLiveTrainStatus(trainNo)
 
         // Fallback to schedule details only if live payload is empty
@@ -74,8 +92,18 @@ function TrainDetailsPage() {
     }
   }, [trainNo, isThisTrainConfirmed])
 
-  // Use activeJourney if confirmed, else fallback to loaded liveData
-  const currentTrainState = isThisTrainConfirmed && activeJourney ? activeJourney : liveData
+  // Use activeJourney merged with liveData if confirmed, ensuring stops & currentStation are present
+  const currentTrainState = isThisTrainConfirmed && activeJourney
+    ? {
+        ...liveData,
+        ...activeJourney,
+        stops: (Array.isArray(activeJourney.stops) && activeJourney.stops.length > 0)
+          ? activeJourney.stops
+          : (Array.isArray(liveData?.stops) && liveData.stops.length > 0 ? liveData.stops : []),
+        currentStation: activeJourney.currentStation || liveData?.currentStation,
+        nextStation: activeJourney.nextStation || liveData?.nextStation,
+      }
+    : liveData
 
   // Fallback train object structure if API loading
   const trainObj = currentTrainState || {

@@ -1,10 +1,10 @@
 /**
  * Journey Cache Layer
- * In-memory & localStorage backed 5-minute cache for RailRadar API responses.
+ * In-memory & localStorage backed 3.5-minute cache for RailRadar API responses.
  * Treats every Railway API request as valuable and eliminates redundant dispatches.
  */
 
-const CACHE_TTL_MS = 5 * 60 * 1000 // 5 Minutes
+const CACHE_TTL_MS = 3.5 * 60 * 1000 // 3.5 Minutes (210,000 ms)
 const STORAGE_CACHE_KEY_PREFIX = 'railalert_journey_cache_'
 
 class JourneyCacheManager {
@@ -20,7 +20,7 @@ class JourneyCacheManager {
   }
 
   /**
-   * Retrieves valid cached response if not expired (< 5 minutes old)
+   * Retrieves valid cached response if not expired (< 3.5 minutes old)
    */
   get(trainNo, type = 'details') {
     if (!trainNo) return null
@@ -60,7 +60,7 @@ class JourneyCacheManager {
   }
 
   /**
-   * Stores complete API response in cache with 5-minute TTL
+   * Stores complete API response in cache with 3.5-minute TTL
    */
   set(trainNo, responseData, type = 'details', ttlMs = CACHE_TTL_MS) {
     if (!trainNo || !responseData) return

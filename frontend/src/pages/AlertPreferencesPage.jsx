@@ -41,6 +41,7 @@ function AlertPreferencesPage() {
     departureTime: '07:40 PM',
     status: 'Running On Time',
     delayMinutes: 0,
+    stops: [],
   }
 
   // Essential ON/OFF Toggle States
@@ -75,8 +76,9 @@ function AlertPreferencesPage() {
   }
 
   const handleConfirmAndStart = () => {
-    // 1. Activate journey in global reactive context (0 extra API calls)
+    // 1. Activate journey in global reactive context with complete route & station state
     startJourney({
+      ...train,
       trainNo: train.trainNo,
       trainName: train.trainName,
       from: train.from,
@@ -87,6 +89,10 @@ function AlertPreferencesPage() {
       status: train.delayMinutes > 0 ? `Delayed by ${train.delayMinutes} Minutes` : 'Running On Time',
       delayMinutes: train.delayMinutes || 0,
       expectedArrival: train.expectedArrival || train.nextStation?.arrivalTime || '--',
+      stops: train.stops || [],
+      currentStation: train.currentStation,
+      nextStation: train.nextStation,
+      previousStation: train.previousStation,
       alertPreferences: preferences,
     })
 
