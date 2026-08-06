@@ -5,6 +5,7 @@ import { ArrowRight, SlidersHorizontal, Train, Calendar, Info } from 'lucide-rea
 import { calculateAiRecommendations, timeToMinutes } from '../utils/aiRecommendationEngine'
 import { searchTrains } from '../services/trainService'
 import { getLocalTodayDateStr, formatLocalDateDisplay } from '../utils/dateUtils'
+import { extractStationCode } from '../utils/stationUtils'
 
 const filterCategories = [
   'All',
@@ -143,7 +144,10 @@ function TrainSearchResultsPage() {
 
   // Enforce flow: Clicking a train card navigates to Train Details page
   const handleSelectTrain = (train) => {
-    navigate(`/train/${train.trainNo}`)
+    const fromCode = extractStationCode(fromStation)
+    const toCode = extractStationCode(toStation)
+    const queryStr = fromCode && toCode ? `?from=${encodeURIComponent(fromCode)}&to=${encodeURIComponent(toCode)}` : ''
+    navigate(`/train/${train.trainNo}${queryStr}`)
   }
 
   return (
@@ -299,13 +303,13 @@ function TrainSearchResultsPage() {
       {!isLoading && aiRecommendations.length > 0 && (
         <div className="w-full bg-white dark:bg-[#161c26] rounded-3xl border border-blue-200/80 dark:border-slate-800/90 p-5 sm:p-6 space-y-4 shadow-sm">
           <div className="flex items-center gap-2.5">
-            <span className="text-xl">🤖</span>
+            <span className="text-xl"></span>
             <div>
               <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
                 AI Recommendation
               </h2>
               <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                Based on your current time, these are the best train options starting next.
+                Based on your current time,These are the best train options starting next.
               </p>
             </div>
           </div>
@@ -359,7 +363,7 @@ function TrainSearchResultsPage() {
               <h3 className="text-xl font-black text-slate-900 dark:text-white">
                 No trains available
               </h3>
-            </div>
+          </div>
           )}
         </div>
       )}
@@ -367,5 +371,4 @@ function TrainSearchResultsPage() {
     </div>
   )
 }
-
 export default TrainSearchResultsPage

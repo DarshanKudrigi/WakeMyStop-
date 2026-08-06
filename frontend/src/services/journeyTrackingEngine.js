@@ -4,6 +4,8 @@
  * Normalizes raw upstream payloads into a unified live tracking state object.
  */
 
+import { extractStationCode, matchesStation } from '../utils/stationUtils'
+
 /**
  * Converts 24-hour time, ISO timestamp string, or Date object into 12-hour AM/PM format
  */
@@ -70,7 +72,8 @@ export function getExpectedTime(scheduledStr, actualStr, delayMins = 0) {
  */
 function getStationCode(s) {
   if (!s) return ''
-  return s.stationCode || s.station?.code || s.code || ''
+  const rawCode = s.stationCode || s.station?.code || s.code || ''
+  return extractStationCode(rawCode)
 }
 
 /**
@@ -117,7 +120,7 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
   const currLoc = data.currentLocation || {}
   const nextHaltObj = data.nextHalt || {}
 
-  let currentStationCode = currLoc.stationCode || getStationCode(currLoc)
+  let currentStationCode = getStationCode(currLoc)
   let currentSeq = currLoc.sequence || 1
 
   // Find matching station in route
@@ -157,20 +160,20 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
   }
 
   // Overall route distance & current train position
-  const totalDistance = trainInfo.distance || (rawRoute.length > 0 ? rawRoute[rawRoute.length - 1].distance : 140) || 140
-  const distanceCovered = currentRouteItem?.distance || (currLoc.segmentProgress ? totalDistance * currLoc.segmentProgress : 0) || 0
+  const totalRouteDistance = trainInfo.distance || (rawRoute.length > 0 ? rawRoute[rawRoute.length - 1].distance : 140) || 140
+  const distanceCovered = currentRouteItem?.distance || (currLoc.segmentProgress ? totalRouteDistance * currLoc.segmentProgress : 0) || 0
 
   // Calculate user-specific trip segment bounds (from station to to station)
-  const userFromCode = userJourneyMeta.from || trainInfo.source?.code || ''
-  const userToCode = userJourneyMeta.to || trainInfo.destination?.code || ''
+  const userFromInput = userJourneyMeta.from || trainInfo.source?.code || ''
+  const userToInput = userJourneyMeta.to || trainInfo.destination?.code || ''
 
-  const fromItem = rawRoute.find((s) => getStationCode(s) === userFromCode)
-  const toItem = rawRoute.find((s) => getStationCode(s) === userToCode)
+  const fromItem = rawRoute.find((s) => matchesStation(s, userFromInput))
+  const toItem = rawRoute.find((s) => matchesStation(s, userToInput))
 
   const userStartDist = typeof fromItem?.distance === 'number' ? fromItem.distance : 0
-  const userEndDist = typeof toItem?.distance === 'number' ? toItem.distance : (totalDistance > 0 ? totalDistance : 140)
+  const userEndDist = typeof toItem?.distance === 'number' ? toItem.distance : (totalRouteDistance > 0 ? totalRouteDistance : 140)
 
-  const userSegmentTotal = Math.max(1, userEndDist - userStartDist)
+  const userSegmentTotal = Math.max(1, Math.round((userEndDist - userStartDist) * 10) / 10)
   const userDistanceCovered = Math.max(0, distanceCovered - userStartDist)
 
   let journeyPercentage = 0
@@ -184,9 +187,21 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
 
   const distanceRemaining = Math.max(0, Math.round((userEndDist - Math.max(userStartDist, distanceCovered)) * 10) / 10)
 
-  // Enrich stops list for timeline components with distinct scheduled and actual/expected times + raw sequence & distance
+  // Enrich stops list for timeline components
   const stopsSource = haltStops.length > 0 ? haltStops : rawRoute
-  const stops = stopsSource.map((s, idx) => {
+
+  // Filter stops so timeline is bounded between userFromInput and userToInput if user segment is defined
+  let filteredStopsSource = stopsSource
+  if (userFromInput && userToInput) {
+    const fromIdx = stopsSource.findIndex((s) => matchesStation(s, userFromInput))
+    const toIdx = stopsSource.findIndex((s) => matchesStation(s, userToInput))
+
+    if (fromIdx !== -1 && toIdx !== -1 && fromIdx < toIdx) {
+      filteredStopsSource = stopsSource.slice(fromIdx, toIdx + 1)
+    }
+  }
+
+  const stops = filteredStopsSource.map((s, idx) => {
     const stCode = getStationCode(s) || `ST${idx}`
     const stName = getStationName(s) || `Station ${idx + 1}`
 
@@ -210,6 +225,7 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
     const actDep = getExpectedTime(rawSchDep, s.actualDeparture, stationDelayDep)
 
     const numDist = typeof s.distance === 'number' ? s.distance : (parseFloat(s.distance) || 0)
+    const relativeDist = Math.max(0, Math.round((numDist - userStartDist) * 10) / 10)
 
     return {
       sequence: s.sequence || idx + 1,
@@ -225,26 +241,31 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
       departureTime: actDep !== '--' ? actDep : schDep,
       haltMinutes: s.haltMinutes || 2,
       platform: s.platform ? `PF ${s.platform}` : 'PF 1',
-      distance: numDist !== undefined ? `${numDist} km` : '0 km',
+      distance: `${relativeDist} km`,
       status: stopStatus,
       delayMinutes: stationDelayDep || stationDelayArr || 0,
     }
   })
 
   // Calculate true Destination ETA (Expected Time of Arrival at user's destination)
-  const targetDestCode = userJourneyMeta.to || trainInfo.destination?.code || ''
-  const destStop = stops.find((st) => st.code === targetDestCode) || stops[stops.length - 1]
+  const resolvedFromCode = fromItem ? getStationCode(fromItem) : extractStationCode(userFromInput)
+  const resolvedToCode = toItem ? getStationCode(toItem) : extractStationCode(userToInput)
+
+  const destStop = stops.find((st) => matchesStation(st, userToInput) || st.code === resolvedToCode) || stops[stops.length - 1]
   const destinationEta = (destStop?.actArr && destStop.actArr !== '--') ? destStop.actArr : ((destStop?.schArr && destStop.schArr !== '--') ? destStop.schArr : nextStation.arrivalTime)
+
+  const resolvedFromName = fromItem ? getStationName(fromItem) : (trainInfo.source?.name || userJourneyMeta.from || 'MYSORE JN')
+  const resolvedToName = toItem ? getStationName(toItem) : (trainInfo.destination?.name || userJourneyMeta.to || 'KSR BENGALURU')
 
   return {
     journeyId: userJourneyMeta.journeyId || `journey_${trainNo}_${Date.now()}`,
     trainNo,
     trainName,
     category,
-    from: userJourneyMeta.from || trainInfo.source?.code || getStationCode(stops[0]) || 'MYS',
-    to: userJourneyMeta.to || trainInfo.destination?.code || getStationCode(stops[stops.length - 1]) || 'SBC',
-    fromName: trainInfo.source?.name || getStationName(stops[0]) || userJourneyMeta.from || 'MYSORE JN',
-    toName: trainInfo.destination?.name || getStationName(stops[stops.length - 1]) || userJourneyMeta.to || 'KSR BENGALURU',
+    from: resolvedFromCode || getStationCode(stops[0]) || 'MYS',
+    to: resolvedToCode || getStationCode(stops[stops.length - 1]) || 'SBC',
+    fromName: resolvedFromName,
+    toName: resolvedToName,
     currentStation,
     nextStation,
     previousStation,
@@ -252,7 +273,7 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
     delayMinutes,
     expectedArrival: destinationEta,
     journeyPercentage,
-    distanceCovered: Math.round(distanceCovered * 10) / 10,
+    distanceCovered: Math.round(userDistanceCovered * 10) / 10,
     distanceRemaining,
     totalDistance: userSegmentTotal,
     runningStatus: deriveRunningStatus(overallStatus, delayMinutes),

@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Play, Pause, CheckCircle2, Info, Check } from 'lucide-react'
 import { useJourney } from '../context/JourneyContext'
 import { getLiveTrainStatus, getTrainDetails } from '../services/trainService'
 import { buildLiveJourneyState } from '../services/journeyTrackingEngine'
+import { extractStationCode } from '../utils/stationUtils'
 
 function AlertPreferencesPage() {
   const { trainNo } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { startJourney } = useJourney()
+
+  const fromParam = extractStationCode(searchParams.get('from'))
+  const toParam = extractStationCode(searchParams.get('to'))
 
   const [liveTrain, setLiveTrain] = useState(null)
 
@@ -21,7 +26,7 @@ function AlertPreferencesPage() {
         res = await getTrainDetails(trainNo)
       }
       if (!isMounted || !res) return
-      const liveState = buildLiveJourneyState(res, { trainNo })
+      const liveState = buildLiveJourneyState(res, { trainNo, from: fromParam, to: toParam })
       setLiveTrain(liveState)
     }
 
@@ -30,7 +35,7 @@ function AlertPreferencesPage() {
     return () => {
       isMounted = false
     }
-  }, [trainNo])
+  }, [trainNo, fromParam, toParam])
 
   const train = liveTrain || {
     trainNo: String(trainNo),

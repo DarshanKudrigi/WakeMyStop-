@@ -1,3 +1,4 @@
+import { extractStationCode } from '../../utils/stationUtils'
 import { useNavigate } from 'react-router-dom'
 import { CheckCircle, Info, Sparkles } from 'lucide-react'
 
@@ -75,8 +76,12 @@ function TrainCard({
   const platformStr = train.platform || 'Platform 1'
   const isPremiumCategory = PREMIUM_CATEGORIES.includes(train.category)
 
+  const fromCode = extractStationCode(train.from)
+  const toCode = extractStationCode(train.to)
+  const queryStr = fromCode && toCode ? `?from=${encodeURIComponent(fromCode)}&to=${encodeURIComponent(toCode)}` : ''
+
   const handleCardClick = () => {
-    navigate(`/train/${train.trainNo}`)
+    navigate(`/train/${train.trainNo}${queryStr}`)
   }
 
   const handleConfirmJourney = (e) => {
@@ -85,7 +90,7 @@ function TrainCard({
     if (onConfirmClick) {
       onConfirmClick(train)
     } else {
-      navigate(`/train/${train.trainNo}`)
+      navigate(`/train/${train.trainNo}${queryStr}`)
     }
   }
 
