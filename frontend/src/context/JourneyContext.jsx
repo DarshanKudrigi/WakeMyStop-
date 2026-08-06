@@ -1,8 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { activeJourneyStore } from '../services/activeJourneyStore'
-import { buildLiveJourneyState } from '../services/journeyTrackingEngine'
-import { journeyCache } from '../services/journeyCache'
-import { liveJourneyEngine } from '../services/liveJourneyEngine'
+import { activeJourneyStore } from '../store/activeJourneyStore'
+import { buildLiveJourneyState } from '../engines/journeyTrackingEngine'
+import { journeyCache } from '../cache/journeyCache'
+import { liveJourneyEngine } from '../engines/liveJourneyEngine'
 import { notificationService } from '../services/notificationService'
 
 const JourneyContext = createContext(null)

@@ -4,8 +4,8 @@
  * Optimizes Railway API credit consumption through dynamic intervals, refresh budget caps, and singleton protection.
  */
 
-import { journeyCache } from './journeyCache'
-import { activeJourneyStore } from './activeJourneyStore'
+import { journeyCache } from '../cache/journeyCache'
+import { activeJourneyStore } from '../store/activeJourneyStore'
 import { liveJourneyEngine } from './liveJourneyEngine'
 import { buildLiveJourneyState } from './journeyTrackingEngine'
 

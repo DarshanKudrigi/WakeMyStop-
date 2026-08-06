@@ -3,10 +3,11 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, Train, Trash2 } from 'lucide-react'
 import { useJourney } from '../context/JourneyContext'
 import { getTrainDetails, getLiveTrainStatus } from '../services/trainService'
-import { buildLiveJourneyState } from '../services/journeyTrackingEngine'
-import { smartRefreshEngine } from '../services/smartRefreshEngine'
-import { journeyCache } from '../services/journeyCache'
+import { buildLiveJourneyState } from '../engines/journeyTrackingEngine'
+import { smartRefreshEngine } from '../engines/smartRefreshEngine'
+import { journeyCache } from '../cache/journeyCache'
 import { extractStationCode } from '../utils/stationUtils'
+import { getLocalTodayDateStr, getDateMode } from '../utils/dateUtils'
 
 // Modular Components
 import TrainSummaryCard from '../components/details/TrainSummaryCard'
@@ -22,9 +23,11 @@ function TrainDetailsPage() {
 
   const fromParam = extractStationCode(searchParams.get('from'))
   const toParam = extractStationCode(searchParams.get('to'))
+  const dateParam = searchParams.get('date') || getLocalTodayDateStr()
+  const dateMode = getDateMode(dateParam)
 
-  // Active Journey check
-  const isThisTrainConfirmed = activeJourney?.trainNo === String(trainNo)
+  // Active Journey check (Only valid for Today / Future active journeys)
+  const isThisTrainConfirmed = dateMode !== 'HISTORICAL' && activeJourney?.trainNo === String(trainNo)
 
   // Synchronous Cache Initialization: Instant timeline render with 0 loading flicker when cache exists
   const [liveData, setLiveData] = useState(() => {
@@ -33,9 +36,9 @@ function TrainDetailsPage() {
     }
     const cachedLive = journeyCache.get(trainNo, 'live')
     const cachedDetails = journeyCache.get(trainNo, 'details')
-    const rawPayload = cachedLive?.responseData || cachedDetails?.responseData || null
+    const rawPayload = dateMode === 'HISTORICAL' ? cachedDetails?.responseData : (cachedLive?.responseData || cachedDetails?.responseData || null)
     if (rawPayload) {
-      return buildLiveJourneyState(rawPayload, { trainNo, from: fromParam, to: toParam })
+      return buildLiveJourneyState(rawPayload, { trainNo, from: fromParam, to: toParam, dateMode, selectedDate: dateParam })
     }
     return null
   })
@@ -43,37 +46,43 @@ function TrainDetailsPage() {
   const [isLoading, setIsLoading] = useState(() => !Boolean(liveData))
   const [lastRefreshMsg, setLastRefreshMsg] = useState('Updated a few seconds ago.')
 
-  // 1. Single Live Status Fetch with Fallback (1 API Request Max when cache missing)
+  // 1. Data Fetch Layer with Mode Awareness
   useEffect(() => {
     let isMounted = true
 
-    // If cache already initialized state, skip setting loading to true
     if (!liveData) {
       setIsLoading(true)
     }
 
     async function loadTrainData() {
       try {
-        // Fetch Live Status (reuses 3.5-min cache internally, 0 network calls if cache valid)
-        let liveRes = await getLiveTrainStatus(trainNo)
+        let payload = null
 
-        // Fallback to schedule details only if live payload is empty
-        if (!liveRes || !liveRes.data) {
-          liveRes = await getTrainDetails(trainNo)
+        if (dateMode === 'HISTORICAL') {
+          // HISTORICAL MODE: Fetch official timetable schedule ONLY (0 live status requests!)
+          payload = await getTrainDetails(trainNo)
+        } else {
+          // TODAY / FUTURE MODE: Fetch live status with fallback to details
+          payload = await getLiveTrainStatus(trainNo)
+          if (!payload || !payload.data) {
+            payload = await getTrainDetails(trainNo)
+          }
         }
 
-        if (!isMounted) return
+        if (!isMounted || !payload) return
 
-        const unifiedState = buildLiveJourneyState(liveRes, {
+        const unifiedState = buildLiveJourneyState(payload, {
           trainNo,
           from: fromParam,
           to: toParam,
-          journeyStatus: isThisTrainConfirmed ? 'Active' : 'Planned',
+          dateMode,
+          selectedDate: dateParam,
+          journeyStatus: isThisTrainConfirmed ? 'Active' : (dateMode === 'HISTORICAL' ? 'Historical Schedule' : 'Planned'),
         })
 
         setLiveData(unifiedState)
       } catch (err) {
-        console.warn('[TrainDetailsPage] Failed to fetch live status:', err.message)
+        console.warn('[TrainDetailsPage] Failed to fetch train data:', err.message)
       } finally {
         if (isMounted) setIsLoading(false)
       }
@@ -81,8 +90,8 @@ function TrainDetailsPage() {
 
     loadTrainData()
 
-    // Start Smart Refresh Engine scheduler ONLY when journey is active & confirmed
-    if (isThisTrainConfirmed) {
+    // Start Smart Refresh Engine scheduler ONLY in Today mode when journey is active & confirmed
+    if (dateMode === 'TODAY' && isThisTrainConfirmed) {
       smartRefreshEngine.startScheduler(trainNo, (updatedState) => {
         if (isMounted && updatedState) {
           setLiveData(updatedState)
@@ -93,13 +102,13 @@ function TrainDetailsPage() {
 
     return () => {
       isMounted = false
-      if (isThisTrainConfirmed) {
+      if (dateMode === 'TODAY' && isThisTrainConfirmed) {
         smartRefreshEngine.stopScheduler()
       }
     }
-  }, [trainNo, isThisTrainConfirmed, fromParam, toParam])
+  }, [trainNo, isThisTrainConfirmed, fromParam, toParam, dateMode, dateParam])
 
-  // Single Source of Truth merging: If journey is active & confirmed, use activeJourney
+  // Single Source of Truth merging
   const currentTrainState = isThisTrainConfirmed && activeJourney
     ? {
         ...activeJourney,
@@ -123,7 +132,7 @@ function TrainDetailsPage() {
     arrivalTime: '09:55 PM',
     duration: '2h 15m',
     distance: '138 km',
-    runningStatus: 'Running On Time',
+    runningStatus: dateMode === 'HISTORICAL' ? 'Scheduled Timetable' : 'Running On Time',
     currentStation: { code: 'MYS', name: 'MYSORE JN', status: 'at-station' },
     nextStation: { code: 'SBC', name: 'KSR BENGALURU', distance: '12 km' },
     stops: [],
@@ -133,6 +142,7 @@ function TrainDetailsPage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const handleRefreshStatus = async () => {
+    if (dateMode === 'HISTORICAL') return
     setIsRefreshing(true)
     const result = await smartRefreshEngine.triggerManualRefresh(trainNo)
     if (result && result.liveState) {
@@ -148,6 +158,11 @@ function TrainDetailsPage() {
   const [showStickyFooter, setShowStickyFooter] = useState(false)
 
   useEffect(() => {
+    if (dateMode === 'HISTORICAL') {
+      setShowStickyFooter(false)
+      return
+    }
+
     const handleScroll = () => {
       const routeElement = document.getElementById('train-route-section')
       if (routeElement) {
@@ -162,7 +177,7 @@ function TrainDetailsPage() {
     window.addEventListener('scroll', handleScroll)
     handleScroll()
     return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
+  }, [dateMode])
 
   // Auto-scroll ref to current train location
   const currentTrainRef = useRef(null)
@@ -182,7 +197,7 @@ function TrainDetailsPage() {
 
   // Mode 1 Action: "Confirm Journey" click
   const handleConfirmJourney = () => {
-    const queryStr = fromParam && toParam ? `?from=${encodeURIComponent(fromParam)}&to=${encodeURIComponent(toParam)}` : ''
+    const queryStr = `?from=${encodeURIComponent(fromParam)}&to=${encodeURIComponent(toParam)}&date=${dateParam}`
     if (activeJourney && activeJourney.trainNo !== String(trainNo)) {
       setIsConflictModalOpen(true)
     } else {
@@ -212,16 +227,18 @@ function TrainDetailsPage() {
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6 pb-28">
       
-      {/* 1. Train Summary Card (Mode 1: Confirm Journey | Mode 2: Cancel Journey) */}
+      {/* 1. Train Summary Card (Mode 1: Confirm Journey | Mode 2: Cancel Journey | Historical Mode) */}
       <TrainSummaryCard
         train={trainObj}
+        dateMode={dateMode}
+        selectedDate={dateParam}
         isJourneyConfirmed={isThisTrainConfirmed}
         onConfirmClick={handleConfirmJourney}
         onCancelClick={handleOpenCancelDialog}
       />
 
       {/* 2. Journey Timeline Progress Card (MODE 2 ONLY: Rendered when journey confirmed) */}
-      {isThisTrainConfirmed && (
+      {isThisTrainConfirmed && dateMode !== 'HISTORICAL' && (
         <JourneyTimelineProgress train={trainObj} />
       )}
 
@@ -229,18 +246,21 @@ function TrainDetailsPage() {
       <ImportantStopsCard
         ref={currentTrainRef}
         train={trainObj}
+        dateMode={dateMode}
       />
 
-      {/* 4. Compact Card-Width Sticky Bottom Sheet Footer */}
-      <StickyBottomStatus
-        train={trainObj}
-        visible={showStickyFooter}
-        isRefreshing={isRefreshing}
-        onRefreshClick={handleRefreshStatus}
-        isJourneyConfirmed={isThisTrainConfirmed}
-        onConfirmClick={handleConfirmJourney}
-        onCancelClick={handleOpenCancelDialog}
-      />
+      {/* 4. Compact Card-Width Sticky Bottom Sheet Footer (Today Mode only) */}
+      {dateMode !== 'HISTORICAL' && (
+        <StickyBottomStatus
+          train={trainObj}
+          visible={showStickyFooter}
+          isRefreshing={isRefreshing}
+          onRefreshClick={handleRefreshStatus}
+          isJourneyConfirmed={isThisTrainConfirmed}
+          onConfirmClick={handleConfirmJourney}
+          onCancelClick={handleOpenCancelDialog}
+        />
+      )}
 
       {/* MODAL 1: CONFLICT MODAL (When active journey already exists for another train) */}
       {isConflictModalOpen && (

@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Play, Pause, CheckCircle2, Info, Check } from 'lucide-react'
 import { useJourney } from '../context/JourneyContext'
 import { getLiveTrainStatus, getTrainDetails } from '../services/trainService'
-import { buildLiveJourneyState } from '../services/journeyTrackingEngine'
+import { buildLiveJourneyState } from '../engines/journeyTrackingEngine'
 import { extractStationCode } from '../utils/stationUtils'
 
 function AlertPreferencesPage() {

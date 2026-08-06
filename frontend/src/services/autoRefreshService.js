@@ -4,7 +4,7 @@
  * Guarantees zero duplicate schedulers or timers exist across the project.
  */
 
-import { smartRefreshEngine } from './smartRefreshEngine'
+import { smartRefreshEngine } from '../engines/smartRefreshEngine'
 
 class AutoRefreshServiceAdapter {
   start(trainNo) {

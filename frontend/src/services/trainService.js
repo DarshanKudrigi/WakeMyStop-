@@ -6,7 +6,7 @@
 
 import { apiRequest } from './apiService'
 import { searchStations } from './stationSearchService'
-import { journeyCache } from './journeyCache'
+import { journeyCache } from '../cache/journeyCache'
 
 // 5-Minute In-Memory Search Cache (TTL: 300,000 ms)
 const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000

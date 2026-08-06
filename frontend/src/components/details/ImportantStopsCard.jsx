@@ -1,65 +1,66 @@
 import { forwardRef } from 'react'
 import { Train, Pencil } from 'lucide-react'
 
-const ImportantStopsCard = forwardRef(function ImportantStopsCard({ train }, ref) {
+const ImportantStopsCard = forwardRef(function ImportantStopsCard({ train, dateMode = 'TODAY' }, ref) {
+  const isHistorical = dateMode === 'HISTORICAL' || train?.isHistorical === true
   const rawStops = Array.isArray(train?.stops) ? train.stops : []
 
   const stops = rawStops.map((st, idx) => ({
     name: st.name || st.stationName || `Station ${idx + 1}`,
     code: st.code || st.stationCode || 'STN',
     schArr: st.schArr || '--',
-    actArr: st.actArr || st.schArr || '--',
+    actArr: isHistorical ? (st.schArr || '--') : (st.actArr || st.schArr || '--'),
     schDep: st.schDep || '--',
-    actDep: st.actDep || st.schDep || '--',
+    actDep: isHistorical ? (st.schDep || '--') : (st.actDep || st.schDep || '--'),
     distance: typeof st.distance === 'number' ? `${st.distance} km` : (st.distance || '0.0 km'),
     rawDistance: typeof st.rawDistance === 'number' ? st.rawDistance : (parseFloat(st.distance) || 0),
     rawSequence: typeof st.rawSequence === 'number' ? st.rawSequence : (st.sequence || idx + 1),
     platform: st.platform || 'PF 1',
-    isCurrent: st.status === 'current' || st.isCurrent || (train?.currentStation?.code && train.currentStation.code === st.code),
-    isPassed: st.status === 'departed' || st.isPassed,
+    isCurrent: !isHistorical && (st.status === 'current' || st.isCurrent || (train?.currentStation?.code && train.currentStation.code === st.code)),
+    isPassed: !isHistorical && (st.status === 'departed' || st.isPassed),
   }))
 
   const currSeq = train?.currentStation?.sequence || train?.currentSeq || 0
   const distCovered = typeof train?.distanceCovered === 'number' ? train.distanceCovered : 0
 
-  // Precise Sequence & Distance Based Position Resolver
+  // Precise Sequence & Distance Based Position Resolver (Today Mode only)
   let currentFoundIndex = -1
 
-  for (let i = 0; i < stops.length; i++) {
-    const st = stops[i]
-    const sSeq = st.rawSequence
-    const sDist = st.rawDistance
+  if (!isHistorical) {
+    for (let i = 0; i < stops.length; i++) {
+      const st = stops[i]
+      const sSeq = st.rawSequence
+      const sDist = st.rawDistance
 
-    if (currSeq > 0 && currSeq >= sSeq) {
-      currentFoundIndex = i
-    } else if (distCovered > 0 && distCovered >= sDist) {
-      currentFoundIndex = i
+      if (currSeq > 0 && currSeq >= sSeq) {
+        currentFoundIndex = i
+      } else if (distCovered > 0 && distCovered >= sDist) {
+        currentFoundIndex = i
+      }
+    }
+
+    if (currentFoundIndex === -1 && train?.currentStation?.code) {
+      currentFoundIndex = stops.findIndex((st) => st.code === train.currentStation.code)
+    }
+
+    if (currentFoundIndex === -1 && train?.nextStation?.code) {
+      const nextIdx = stops.findIndex((st) => st.code === train.nextStation.code)
+      if (nextIdx > 0) currentFoundIndex = nextIdx - 1
+      else if (nextIdx === 0) currentFoundIndex = 0
+    }
+
+    if (currentFoundIndex === -1 && stops.length > 0) {
+      const percent = typeof train?.journeyPercentage === 'number' ? train.journeyPercentage : 0
+      currentFoundIndex = Math.min(stops.length - 1, Math.max(0, Math.floor((percent / 100) * (stops.length - 1))))
+    }
+
+    if (currentFoundIndex !== -1 && stops[currentFoundIndex]) {
+      stops[currentFoundIndex].isCurrent = true
     }
   }
 
-  // Fallback 1: Match train.currentStation.code or train.nextStation.code
-  if (currentFoundIndex === -1 && train?.currentStation?.code) {
-    currentFoundIndex = stops.findIndex((st) => st.code === train.currentStation.code)
-  }
-
-  if (currentFoundIndex === -1 && train?.nextStation?.code) {
-    const nextIdx = stops.findIndex((st) => st.code === train.nextStation.code)
-    if (nextIdx > 0) currentFoundIndex = nextIdx - 1
-    else if (nextIdx === 0) currentFoundIndex = 0
-  }
-
-  // Fallback 2: Journey Percentage interpolation
-  if (currentFoundIndex === -1 && stops.length > 0) {
-    const percent = typeof train?.journeyPercentage === 'number' ? train.journeyPercentage : 0
-    currentFoundIndex = Math.min(stops.length - 1, Math.max(0, Math.floor((percent / 100) * (stops.length - 1))))
-  }
-
-  if (currentFoundIndex !== -1 && stops[currentFoundIndex]) {
-    stops[currentFoundIndex].isCurrent = true
-  }
-
   // Check if train is stopped AT station vs IN TRANSIT between stations
-  const isStoppedAtStation = train?.currentStation?.status === 'at-station' && (train?.currentStation?.code === stops[currentFoundIndex]?.code)
+  const isStoppedAtStation = !isHistorical && train?.currentStation?.status === 'at-station' && (train?.currentStation?.code === stops[currentFoundIndex]?.code)
 
   return (
     <div id="train-route-section" className="w-full bg-white dark:bg-[#111936] rounded-3xl border border-slate-200/80 dark:border-slate-800/80 p-4 sm:p-6 shadow-sm space-y-4">
@@ -70,7 +71,7 @@ const ImportantStopsCard = forwardRef(function ImportantStopsCard({ train }, ref
           <div className="w-full border-t border-slate-200 dark:border-slate-800" />
         </div>
         <span className="relative px-4 py-1 bg-slate-50 dark:bg-slate-800 text-[11px] font-black text-slate-600 dark:text-slate-300 rounded-full border border-slate-200 dark:border-slate-700 shadow-xs uppercase tracking-wider">
-          LIVE ROUTE TIMELINE
+          {isHistorical ? 'SCHEDULED TIMETABLE' : 'LIVE ROUTE TIMELINE'}
         </span>
       </div>
 
@@ -86,8 +87,8 @@ const ImportantStopsCard = forwardRef(function ImportantStopsCard({ train }, ref
         <div className="relative space-y-0 py-1">
           {stops.map((stop, idx) => {
             const isCurrent = stop.isCurrent
-            const hasArrDelay = stop.actArr && stop.actArr !== '--' && stop.actArr !== stop.schArr
-            const hasDepDelay = stop.actDep && stop.actDep !== '--' && stop.actDep !== stop.schDep
+            const hasArrDelay = !isHistorical && stop.actArr && stop.actArr !== '--' && stop.actArr !== stop.schArr
+            const hasDepDelay = !isHistorical && stop.actDep && stop.actDep !== '--' && stop.actDep !== stop.schDep
             const showTrainLogoAtNode = isCurrent && isStoppedAtStation
 
             return (
@@ -195,13 +196,13 @@ const ImportantStopsCard = forwardRef(function ImportantStopsCard({ train }, ref
 
                 </div>
 
-                {/* In-Transit Track Position Marker (Rendered directly ON the track line between stations when train is moving) */}
-                {isCurrent && !isStoppedAtStation && idx < stops.length - 1 && (
+                {/* In-Transit Track Position Marker (Today Mode only) */}
+                {!isHistorical && isCurrent && !isStoppedAtStation && idx < stops.length - 1 && (
                   <div className="relative grid grid-cols-12 items-center py-2 px-2">
                     {/* Continuous Neutral Grey Railway Track */}
                     <div className="absolute left-[22%] sm:left-[23%] top-0 bottom-0 pointer-events-none flex justify-center items-center overflow-hidden z-0">
                       <svg className="w-9 h-full" preserveAspectRatio="none" viewBox="0 0 36 30">
-                        <line x1="10" y1="0" x2="10" y2="60" stroke="currentColor" className="text-slate-400 dark:text-slate-600" strokeWidth="3" />
+                        <line x1="10" y1="0" x2="10" y2="30" stroke="currentColor" className="text-slate-400 dark:text-slate-600" strokeWidth="3" />
                         <line x1="26" y1="0" x2="26" y2="60" stroke="currentColor" className="text-slate-400 dark:text-slate-600" strokeWidth="3" />
                         <line x1="6" y1="15" x2="30" y2="15" stroke="currentColor" className="text-slate-300 dark:text-slate-700" strokeWidth="2.5" strokeLinecap="round" />
                       </svg>
@@ -226,7 +227,7 @@ const ImportantStopsCard = forwardRef(function ImportantStopsCard({ train }, ref
         </div>
       ) : (
         <div className="py-8 text-center text-xs font-bold text-slate-400">
-          Loading live route information...
+          Loading timetable information...
         </div>
       )}
 

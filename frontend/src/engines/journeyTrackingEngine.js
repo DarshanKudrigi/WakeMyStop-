@@ -103,14 +103,16 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
     return null
   }
 
+  const isHistorical = userJourneyMeta.dateMode === 'HISTORICAL' || userJourneyMeta.isHistorical === true
+
   const data = rawLivePayload.data || rawLivePayload
   const trainInfo = data.train || {}
   const trainNo = String(data.trainNumber || trainInfo.number || userJourneyMeta.trainNo || '20608')
   const trainName = data.trainName || trainInfo.name || userJourneyMeta.trainName || 'VANDE BHARAT EXP'
   const category = trainInfo.category || trainInfo.type || userJourneyMeta.category || 'Superfast'
 
-  const overallStatus = data.status || userJourneyMeta.status || 'running'
-  const delayMinutes = typeof data.delayMinutes === 'number' ? data.delayMinutes : (userJourneyMeta.delayMinutes || 0)
+  const overallStatus = isHistorical ? 'scheduled' : (data.status || userJourneyMeta.status || 'running')
+  const delayMinutes = isHistorical ? 0 : (typeof data.delayMinutes === 'number' ? data.delayMinutes : (userJourneyMeta.delayMinutes || 0))
   const lastUpdated = data.lastUpdatedAt || new Date().toISOString()
 
   const rawRoute = Array.isArray(data.route) ? data.route : []
@@ -132,9 +134,9 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
   const currentStation = {
     code: getStationCode(currentRouteItem) || getStationCode(currLoc) || trainInfo.source?.code || userJourneyMeta.from || 'MYS',
     name: getStationName(currentRouteItem) || getStationName(currLoc) || trainInfo.source?.name || userJourneyMeta.from || 'MYSORE JN',
-    status: currentRouteItem?.status || currLoc.status || 'at-station',
+    status: isHistorical ? 'scheduled' : (currentRouteItem?.status || currLoc.status || 'at-station'),
     sequence: currentRouteItem?.sequence || currentSeq,
-    departureTime: formatTime12(currentRouteItem?.actualDeparture || currentRouteItem?.scheduledDeparture || currentRouteItem?.departure),
+    departureTime: formatTime12(currentRouteItem?.scheduledDeparture || currentRouteItem?.departure || currentRouteItem?.actualDeparture),
   }
 
   let nextRouteItem = rawRoute.find((s) => getStationCode(s) === getStationCode(nextHaltObj) || (s.sequence > currentSeq && (s.isHalt || s.isHalt === undefined)))
@@ -147,7 +149,7 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
     name: getStationName(nextRouteItem) || getStationName(nextHaltObj) || trainInfo.destination?.name || userJourneyMeta.to || 'KSR BENGALURU',
     distance: nextHaltObj.distance ? `${nextHaltObj.distance} km` : (nextRouteItem?.distance ? `${nextRouteItem.distance} km` : '12 km'),
     sequence: nextRouteItem?.sequence || (currentSeq + 1),
-    arrivalTime: formatTime12(nextRouteItem?.actualArrival || nextRouteItem?.scheduledArrival || nextRouteItem?.arrival),
+    arrivalTime: formatTime12(nextRouteItem?.scheduledArrival || nextRouteItem?.arrival || nextRouteItem?.actualArrival),
     platform: nextRouteItem?.platform ? `PF ${nextRouteItem.platform}` : 'PF 1',
   }
 
@@ -206,23 +208,25 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
     const stName = getStationName(s) || `Station ${idx + 1}`
 
     let stopStatus = 'upcoming'
-    if (s.sequence < currentSeq || s.status === 'departed') {
-      stopStatus = 'departed'
-    } else if (s.sequence === currentSeq || stCode === currentStation.code) {
-      stopStatus = 'current'
+    if (!isHistorical) {
+      if (s.sequence < currentSeq || s.status === 'departed') {
+        stopStatus = 'departed'
+      } else if (s.sequence === currentSeq || stCode === currentStation.code) {
+        stopStatus = 'current'
+      }
     }
 
-    const stationDelayArr = typeof s.delayArrival === 'number' ? s.delayArrival : delayMinutes
-    const stationDelayDep = typeof s.delayDeparture === 'number' ? s.delayDeparture : delayMinutes
+    const stationDelayArr = isHistorical ? 0 : (typeof s.delayArrival === 'number' ? s.delayArrival : delayMinutes)
+    const stationDelayDep = isHistorical ? 0 : (typeof s.delayDeparture === 'number' ? s.delayDeparture : delayMinutes)
 
     const rawSchArr = s.scheduledArrival || s.arrival
     const rawSchDep = s.scheduledDeparture || s.departure
 
     const schArr = rawSchArr ? formatTime12(rawSchArr) : '--'
-    const actArr = getExpectedTime(rawSchArr, s.actualArrival, stationDelayArr)
+    const actArr = isHistorical ? schArr : getExpectedTime(rawSchArr, s.actualArrival, stationDelayArr)
 
     const schDep = rawSchDep ? formatTime12(rawSchDep) : '--'
-    const actDep = getExpectedTime(rawSchDep, s.actualDeparture, stationDelayDep)
+    const actDep = isHistorical ? schDep : getExpectedTime(rawSchDep, s.actualDeparture, stationDelayDep)
 
     const numDist = typeof s.distance === 'number' ? s.distance : (parseFloat(s.distance) || 0)
     const relativeDist = Math.max(0, Math.round((numDist - userStartDist) * 10) / 10)
@@ -234,16 +238,16 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
       code: stCode,
       name: stName,
       schArr,
-      actArr,
+      actArr: isHistorical ? schArr : actArr,
       schDep,
-      actDep,
-      arrivalTime: actArr !== '--' ? actArr : schArr,
-      departureTime: actDep !== '--' ? actDep : schDep,
+      actDep: isHistorical ? schDep : actDep,
+      arrivalTime: schArr !== '--' ? schArr : actArr,
+      departureTime: schDep !== '--' ? schDep : actDep,
       haltMinutes: s.haltMinutes || 2,
       platform: s.platform ? `PF ${s.platform}` : 'PF 1',
       distance: `${relativeDist} km`,
       status: stopStatus,
-      delayMinutes: stationDelayDep || stationDelayArr || 0,
+      delayMinutes: isHistorical ? 0 : (stationDelayDep || stationDelayArr || 0),
     }
   })
 
@@ -252,7 +256,7 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
   const resolvedToCode = toItem ? getStationCode(toItem) : extractStationCode(userToInput)
 
   const destStop = stops.find((st) => matchesStation(st, userToInput) || st.code === resolvedToCode) || stops[stops.length - 1]
-  const destinationEta = (destStop?.actArr && destStop.actArr !== '--') ? destStop.actArr : ((destStop?.schArr && destStop.schArr !== '--') ? destStop.schArr : nextStation.arrivalTime)
+  const destinationEta = (destStop?.schArr && destStop.schArr !== '--') ? destStop.schArr : ((destStop?.actArr && destStop.actArr !== '--') ? destStop.actArr : nextStation.arrivalTime)
 
   const resolvedFromName = fromItem ? getStationName(fromItem) : (trainInfo.source?.name || userJourneyMeta.from || 'MYSORE JN')
   const resolvedToName = toItem ? getStationName(toItem) : (trainInfo.destination?.name || userJourneyMeta.to || 'KSR BENGALURU')
@@ -270,17 +274,19 @@ export function buildLiveJourneyState(rawLivePayload, userJourneyMeta = {}) {
     nextStation,
     previousStation,
     currentSeq,
-    delayMinutes,
+    delayMinutes: isHistorical ? 0 : delayMinutes,
     expectedArrival: destinationEta,
     journeyPercentage,
     distanceCovered: Math.round(userDistanceCovered * 10) / 10,
     distanceRemaining,
     totalDistance: userSegmentTotal,
-    runningStatus: deriveRunningStatus(overallStatus, delayMinutes),
+    runningStatus: isHistorical ? 'Scheduled Timetable' : deriveRunningStatus(overallStatus, delayMinutes),
     platform: nextStation.platform,
     lastUpdated,
     apiHealth: 'OK',
-    journeyStatus: overallStatus === 'completed' ? 'Completed' : (userJourneyMeta.journeyStatus || 'Active'),
+    isHistorical,
+    dateMode: isHistorical ? 'HISTORICAL' : (userJourneyMeta.dateMode || 'TODAY'),
+    journeyStatus: isHistorical ? 'Historical Schedule' : (overallStatus === 'completed' ? 'Completed' : (userJourneyMeta.journeyStatus || 'Active')),
     stops: stops.length > 0 ? stops : (userJourneyMeta.stops || []),
   }
 }

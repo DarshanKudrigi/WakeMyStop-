@@ -5,10 +5,10 @@
  * and synchronizing UI states without replacing entire state objects.
  */
 
-import { getLiveTrainStatus } from './trainService'
+import { getLiveTrainStatus } from '../services/trainService'
 import { parseLiveStatusResponse } from './journeyTrackingEngine'
-import { journeyCache } from './journeyCache'
-import { activeJourneyStore } from './activeJourneyStore'
+import { journeyCache } from '../cache/journeyCache'
+import { activeJourneyStore } from '../store/activeJourneyStore'
 
 class LiveJourneyEngineManager {
   constructor() {

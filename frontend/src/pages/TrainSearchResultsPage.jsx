@@ -2,9 +2,9 @@ import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import TrainCard from '../components/journey/TrainCard'
 import { ArrowRight, SlidersHorizontal, Train, Calendar, Info } from 'lucide-react'
-import { calculateAiRecommendations, timeToMinutes } from '../utils/aiRecommendationEngine'
+import { calculateAiRecommendations, timeToMinutes } from '../engines/aiRecommendationEngine'
 import { searchTrains } from '../services/trainService'
-import { getLocalTodayDateStr, formatLocalDateDisplay } from '../utils/dateUtils'
+import { getLocalTodayDateStr, formatLocalDateDisplay, getDateMode } from '../utils/dateUtils'
 import { extractStationCode } from '../utils/stationUtils'
 
 const filterCategories = [
@@ -94,12 +94,8 @@ function TrainSearchResultsPage() {
     setSortBy(newSort)
   }
 
-  // Compute date mode: 'TODAY', 'FUTURE', or 'PAST'
-  const dateMode = useMemo(() => {
-    if (!selectedDate) return 'TODAY'
-    if (selectedDate === todayStr) return 'TODAY'
-    return selectedDate > todayStr ? 'FUTURE' : 'PAST'
-  }, [selectedDate, todayStr])
+  // Compute operational date mode: 'TODAY', 'FUTURE', or 'HISTORICAL'
+  const dateMode = useMemo(() => getDateMode(selectedDate), [selectedDate])
 
   // Calculate dynamic AI Recommendations (Max 2 Trains)
   const { recommendations: aiRecommendations } = useMemo(() => {
@@ -223,6 +219,11 @@ function TrainSearchResultsPage() {
             </div>
             <p className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 flex items-center gap-2">
               <span>📅 {formatLocalDateDisplay(selectedDate)}</span>
+              {dateMode === 'HISTORICAL' && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                  📅 Historical Schedule
+                </span>
+              )}
               {dateMode === 'FUTURE' && (
                 <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
                   Future Date

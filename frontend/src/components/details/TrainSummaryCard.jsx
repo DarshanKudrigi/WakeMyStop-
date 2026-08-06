@@ -1,12 +1,15 @@
-import { ShieldCheck, AlertTriangle, CheckCircle2, ArrowRight, Trash2 } from 'lucide-react'
+import { ShieldCheck, AlertTriangle, CheckCircle2, ArrowRight, Trash2, Calendar } from 'lucide-react'
 
-function TrainSummaryCard({ train, onConfirmClick, onCancelClick, isJourneyConfirmed }) {
+function TrainSummaryCard({ train, onConfirmClick, onCancelClick, isJourneyConfirmed, dateMode = 'TODAY', selectedDate }) {
   if (!train) return null
 
-  const isDelayed = train.isDelayed
-  const statusBadgeColor = isDelayed
-    ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30'
-    : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+  const isHistorical = dateMode === 'HISTORICAL'
+  const isDelayed = train.isDelayed && !isHistorical
+  const statusBadgeColor = isHistorical
+    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
+    : (isDelayed
+      ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30'
+      : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30')
 
   const totalDistance = train.distance || '138 km'
 
@@ -24,10 +27,24 @@ function TrainSummaryCard({ train, onConfirmClick, onCancelClick, isJourneyConfi
           </h1>
         </div>
 
-        {/* Delay Status Badge (Top-Right) */}
+        {/* Status / Mode Badge (Top-Right) */}
         <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black border ${statusBadgeColor}`}>
-          {isDelayed ? <AlertTriangle className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-          <span>{train.status}</span>
+          {isHistorical ? (
+            <>
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Historical Schedule</span>
+            </>
+          ) : isDelayed ? (
+            <>
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>{train.status}</span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>{train.status}</span>
+            </>
+          )}
         </span>
       </div>
 
@@ -47,8 +64,12 @@ function TrainSummaryCard({ train, onConfirmClick, onCancelClick, isJourneyConfi
           </div>
         </div>
 
-        {/* MODE 1: Confirm Journey Button | MODE 2: Red Outlined Cancel Journey Button */}
-        {isJourneyConfirmed ? (
+        {/* MODE 1: Confirm Journey Button | MODE 2: Red Outlined Cancel Journey Button | HISTORICAL: Schedule Info Badge */}
+        {isHistorical ? (
+          <span className="py-2 px-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-extrabold text-xs border border-amber-200 dark:border-amber-800">
+            Official Timetable
+          </span>
+        ) : isJourneyConfirmed ? (
           <button
             type="button"
             onClick={onCancelClick}

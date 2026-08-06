@@ -15,6 +15,18 @@ export function getLocalTodayDateStr() {
 }
 
 /**
+ * Returns the operational date mode for a given YYYY-MM-DD date string
+ * Returns: 'HISTORICAL' | 'TODAY' | 'FUTURE'
+ */
+export function getDateMode(selectedDateStr) {
+  if (!selectedDateStr) return 'TODAY'
+  const todayStr = getLocalTodayDateStr()
+  if (selectedDateStr < todayStr) return 'HISTORICAL'
+  if (selectedDateStr === todayStr) return 'TODAY'
+  return 'FUTURE'
+}
+
+/**
  * Formats a YYYY-MM-DD date string into a user-friendly local date string
  * Example: "2026-08-01" -> "Saturday, 1 Aug 2026"
  */
