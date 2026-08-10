@@ -10,7 +10,7 @@
 - 🔔 **Smart Destination Alarms**: Custom station alerts (SMS, WhatsApp, sound alarms, vibration) before reaching your destination stop so you never miss a station.
 - 📊 **Active Journey Lifecycle Engine**: Centralized reactive state management tracking journey states (`Planned`, `Active`, `Completed`, `Cancelled`) with single-active-journey enforcement.
 - 📱 **Collapsible Search & Sticky Controls**: Collapsible search header that smoothly hides on scroll to maximize mobile screen real estate.
-- 🌙 **Deep Charcoal Dark Mode**: High-contrast, Apple/GitHub Dark-inspired theme that is easy on the eyes during nighttime travel.
+- 🌙 **Deep Charcoal Dark Mode**: High-contrast, Apple/GitHub Daduchbark-inspired theme that is easy on the eyes during nighttime travel.
 - ⚡ **API Abstraction & Caching**: Built-in TTL caching, in-flight request deduplication, and fallback mock adapters for zero API credit wastage during development.
 
 ---
