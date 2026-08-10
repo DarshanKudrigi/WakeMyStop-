@@ -1,4 +1,5 @@
 import { extractStationCode } from '../../utils/stationUtils'
+import { getLocalTodayDateStr } from '../../utils/dateUtils'
 import { useNavigate } from 'react-router-dom'
 import { CheckCircle, Info, Sparkles } from 'lucide-react'
 
@@ -66,7 +67,8 @@ function TrainCard({
     typeof window !== 'undefined' && localStorage.getItem('railalert_active_journey') !== null
 
   // Modes
-  const isTodayMode = dateMode === 'TODAY'
+  const todayStr = getLocalTodayDateStr()
+  const isTodayMode = selectedDate ? selectedDate === todayStr : dateMode === 'TODAY'
 
   // Confirm Journey enabled ONLY on TODAY mode + train runs on selected date + no active journey
   const isConfirmDisabled = !isTodayMode || !runsOnSelectedDate || hasActiveJourney

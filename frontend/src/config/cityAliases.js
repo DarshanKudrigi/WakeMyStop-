@@ -1,7 +1,4 @@
-/**
- * Indian Railway City Aliases, Colonial Names & Colloquial Synonyms Dictionary
- * Maps common historical names, city aliases, and regional spellings to official keywords & station codes.
- */
+
 
 export const CITY_ALIASES = {
   bangalore: { official: 'bengaluru', aliasName: 'Bangalore', codes: ['sbc', 'smvb', 'bnc', 'yjpr'] },

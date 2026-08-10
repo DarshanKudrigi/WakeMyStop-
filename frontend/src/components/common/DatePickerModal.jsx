@@ -18,13 +18,8 @@ function DatePickerModal({ isOpen, onClose, selectedDate, onSelectDate }) {
 
   const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
-  // Determine if previous month navigation is allowed (cannot go before current month & year)
-  const isPrevMonthDisabled =
-    currentYear < today.getFullYear() ||
-    (currentYear === today.getFullYear() && currentMonth <= today.getMonth())
-
+  // Allow past and future month navigation freely
   const handlePrevMonth = () => {
-    if (isPrevMonthDisabled) return
     if (currentMonth === 0) {
       setCurrentMonth(11)
       setCurrentYear((y) => y - 1)
@@ -60,12 +55,11 @@ function DatePickerModal({ isOpen, onClose, selectedDate, onSelectDate }) {
     })
   }
 
-  // Add days of current month
+  // Add days of current month (all dates past, today, and future are selectable)
   for (let d = 1; d <= daysInMonth; d++) {
     const dateObj = new Date(currentYear, currentMonth, d)
     dateObj.setHours(0, 0, 0, 0)
 
-    const isPast = dateObj < today
     const isToday = dateObj.getTime() === today.getTime()
     const formattedStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
     const isSelected = selectedDate === formattedStr
@@ -73,7 +67,7 @@ function DatePickerModal({ isOpen, onClose, selectedDate, onSelectDate }) {
     calendarDays.push({
       day: d,
       isCurrentMonth: true,
-      isDisabled: isPast,
+      isDisabled: false,
       isToday,
       isSelected,
       dateStr: formattedStr,
@@ -101,12 +95,12 @@ function DatePickerModal({ isOpen, onClose, selectedDate, onSelectDate }) {
     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      {/* Calendar Modal Surface (Reference Image Styling) */}
+      {/* Calendar Modal Surface */}
       <div className="relative w-full max-w-sm bg-white dark:bg-[#111936] rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-200 z-10">
         
         {/* Top Header Bar */}
@@ -131,8 +125,7 @@ function DatePickerModal({ isOpen, onClose, selectedDate, onSelectDate }) {
               <button
                 type="button"
                 onClick={handlePrevMonth}
-                disabled={isPrevMonthDisabled}
-                className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                 title="Previous Month"
               >
                 <ChevronLeft className="w-5 h-5" />

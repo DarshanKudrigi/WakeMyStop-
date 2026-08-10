@@ -1,6 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 
-import ProtectedRoute from '../components/ProtectedRoute'
 import DashboardPage from '../pages/DashboardPage'
 import TrainSearchResultsPage from '../pages/TrainSearchResultsPage'
 import TrainDetailsPage from '../pages/TrainDetailsPage'
@@ -11,59 +10,45 @@ import MainLayout from '../layouts/MainLayout'
 import ProtectedLayout from '../layouts/ProtectedLayout'
 import { isAuthenticated } from '../utils/auth'
 
-function AppRoutes() {
-  const authenticated = isAuthenticated()
+/**
+ * Public-only route wrapper (Login, Register)
+ * Dynamically checks auth on render to prevent stale state redirect loops
+ */
+function PublicOnlyRoute({ children }) {
+  if (isAuthenticated()) {
+    return <Navigate to="/dashboard" replace />
+  }
+  return children
+}
 
+/**
+ * Root / Wildcard redirect handler
+ * Dynamically evaluates auth status on every navigation evaluation
+ */
+function RootRedirect() {
+  return <Navigate to={isAuthenticated() ? '/dashboard' : '/login'} replace />
+}
+
+function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to={authenticated ? '/dashboard' : '/login'} replace />} />
-      <Route path="/login" element={authenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
-      <Route path="/register" element={authenticated ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
+      <Route path="/" element={<RootRedirect />} />
+      <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
+      <Route path="/register" element={<PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>} />
+
+      {/* Protected Routes encapsulated inside ProtectedLayout & MainLayout */}
       <Route element={<ProtectedLayout />}>
         <Route element={<MainLayout />}>
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <DashboardPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/journeys"
-            element={
-              <ProtectedRoute>
-                <TrainSearchResultsPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/train/:trainNo"
-            element={
-              <ProtectedRoute>
-                <TrainDetailsPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/alert-preferences/:trainNo"
-            element={
-              <ProtectedRoute>
-                <AlertPreferencesPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/journey/active/:trainNo"
-            element={
-              <ProtectedRoute>
-                <TrainDetailsPage />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/journeys" element={<TrainSearchResultsPage />} />
+          <Route path="/train/:trainNo" element={<TrainDetailsPage />} />
+          <Route path="/alert-preferences/:trainNo" element={<AlertPreferencesPage />} />
+          <Route path="/journey/active/:trainNo" element={<TrainDetailsPage />} />
         </Route>
       </Route>
-      <Route path="*" element={<Navigate to={authenticated ? '/dashboard' : '/login'} replace />} />
+
+      {/* Catch-all fallback */}
+      <Route path="*" element={<RootRedirect />} />
     </Routes>
   )
 }

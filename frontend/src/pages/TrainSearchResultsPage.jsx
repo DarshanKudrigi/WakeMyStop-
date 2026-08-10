@@ -97,27 +97,42 @@ function TrainSearchResultsPage() {
   // Compute operational date mode: 'TODAY', 'FUTURE', or 'HISTORICAL'
   const dateMode = useMemo(() => getDateMode(selectedDate), [selectedDate])
 
+  // Operating Trains List: Only trains that operate on selected date's day of week
+  const operatingTrains = useMemo(() => {
+    if (!rawTrains || rawTrains.length === 0) return []
+
+    const selectedDayIndex = selectedDate
+      ? new Date(selectedDate + 'T00:00:00').getDay()
+      : new Date().getDay()
+    const weekDayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const selectedDayName = weekDayNames[selectedDayIndex]
+
+    return rawTrains.filter((t) => {
+      return t.runsDaily || (Array.isArray(t.runningDays) && t.runningDays.includes(selectedDayName))
+    })
+  }, [rawTrains, selectedDate])
+
   // Calculate dynamic AI Recommendations (Max 2 Trains)
   const { recommendations: aiRecommendations } = useMemo(() => {
-    return calculateAiRecommendations(rawTrains, selectedDate, dateMode)
-  }, [rawTrains, selectedDate, dateMode])
+    return calculateAiRecommendations(operatingTrains, selectedDate, dateMode)
+  }, [operatingTrains, selectedDate, dateMode])
 
   // Calculate dynamic category counts
   const categoryCounts = useMemo(() => {
-    const counts = { All: rawTrains.length }
+    const counts = { All: operatingTrains.length }
     filterCategories.forEach((cat) => {
       if (cat !== 'All') {
-        counts[cat] = rawTrains.filter(
+        counts[cat] = operatingTrains.filter(
           (t) => t.category.toLowerCase() === cat.toLowerCase()
         ).length
       }
     })
     return counts
-  }, [rawTrains])
+  }, [operatingTrains])
 
   // Filter and sort trains dynamically
   const filteredAndSortedTrains = useMemo(() => {
-    let result = [...rawTrains]
+    let result = [...operatingTrains]
 
     if (activeFilter !== 'All') {
       result = result.filter(
@@ -136,7 +151,7 @@ function TrainSearchResultsPage() {
     })
 
     return result
-  }, [rawTrains, activeFilter, sortBy])
+  }, [operatingTrains, activeFilter, sortBy])
 
   // Enforce flow: Clicking a train card navigates to Train Details page
   const handleSelectTrain = (train) => {
